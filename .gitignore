@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────
+#  Build output
+# ─────────────────────────────────────────
+build/
+out/
+bin/
+lib/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+OpenGLRenderer
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# ─────────────────────────────────────────
+#  Assets (large files — track with Git LFS
+#  or keep out of repo entirely)
+# ─────────────────────────────────────────
+assets/models/
+assets/textures/
+external
+*.obj
+*.fbx
+*.blend
+*.png
+*.jpg
+*.jpeg
+*.hdr
+*.exr
+*.tga
+*.mtl
+
+# Exception: keep small test assets if needed
+# !assets/test/**
+
+# ─────────────────────────────────────────
+#  VS Code
+# ─────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# ─────────────────────────────────────────
+#  macOS
+# ─────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ─────────────────────────────────────────
+#  Logs and temp files
+# ─────────────────────────────────────────
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────
+#  Dependencies (vendored via package manager)
+#  GLAD is an exception — it's generated source
+#  that belongs in the repo
+# ─────────────────────────────────────────
+# external/         ← do NOT ignore, GLAD lives here

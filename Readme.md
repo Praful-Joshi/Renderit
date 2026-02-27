@@ -9,7 +9,7 @@ The goal is not just a working renderer but a professional, modular codebase tha
 ## Roadmap
 
 - [x] **Step 1** — Window/Application architecture (GLFW, GLAD, core engine loop)
-- [ ] **Step 2** — First triangle: VAOs, VBOs, vertex and fragment shaders
+- [x] **Step 2** — First triangle: VAOs, VBOs, vertex and fragment shaders
 - [ ] **Step 3** — Texturing: UVs, stb_image, texture units
 - [ ] **Step 4** — OBJ model loading (manual parser)
 - [ ] **Step 5** — Blinn-Phong lighting: normals, diffuse, specular, ambient

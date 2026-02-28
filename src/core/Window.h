@@ -13,6 +13,18 @@ struct WindowConfig {
     bool vsync       = true;
 };
 
+/**
+ * @brief Window class responsible for creating
+ *      and managing actul GLFW window and GLAD
+ *      initialization.
+ *
+ * Flow:
+ * 
+ *  - constructor(): Creates a GLFW window, sets
+ *                  it as the current context and
+ *                  initializes GLAD.
+ * 
+ */
 class Window {
 public:
     explicit Window(const WindowConfig& config);

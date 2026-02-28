@@ -4,7 +4,6 @@
 #include <iostream>
 
 namespace Core {
-
 Application::Application() {
     WindowConfig config;
     config.width  = 800;

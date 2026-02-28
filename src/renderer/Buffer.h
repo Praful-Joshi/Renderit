@@ -14,7 +14,16 @@ struct VertexAttribute {
     GLint   count;      // number of floats (2 for vec2, 3 for vec3, etc.)
     GLsizei offset;     // byte offset from the start of one vertex
 };
-
+/**
+ * @brief Buffer class responsible for managing OpenGL buffers.
+ *
+ * Flow:
+ * 
+ *  - constructor(): Creates a vertex array and a buffer
+ *                  and stores their ID in VAO & VBO
+ *                  respectively.
+ * 
+ */
 class Buffer {
 public:
     Buffer();

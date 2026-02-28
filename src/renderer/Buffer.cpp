@@ -65,7 +65,7 @@ void Buffer::uploadVertices(const std::vector<float>& vertices,
     m_vertexCount = static_cast<GLsizei>(vertices.size() * sizeof(float)) / stride;
 
     glBindVertexArray(0); // unbind — VAO has recorded everything
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0); // unbind - VBO's data is now in GPU
 }
 
 void Buffer::uploadIndices(const std::vector<uint32_t>& indices) {

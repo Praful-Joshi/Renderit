@@ -5,7 +5,16 @@
 #include <string>
 
 namespace Renderer {
-
+/**
+ * @brief Shader class responsible for managing vertex
+ *          and fragment shaders.
+ *
+ *  - constructor(): Compiles both shaders. Creates a 
+ *                  shader program and saves its ID in
+ *                  m_programID. Links compiled shaders 
+ *                  to this program.
+ * 
+ */
 class Shader {
 public:
     // Read GLSL files from disk, compile and link on construction.

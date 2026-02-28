@@ -11,7 +11,6 @@ namespace Renderer {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Construction / Destruction
 // ─────────────────────────────────────────────────────────────────────────────
-
 Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath) {
     std::string vertSource = readFile(vertexPath);
     std::string fragSource = readFile(fragmentPath);

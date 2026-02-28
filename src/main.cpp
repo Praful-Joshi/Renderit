@@ -12,7 +12,6 @@
 
 class TriangleApp : public Core::Application {
 protected:
-
     void onInit() override {
         glEnable(GL_DEPTH_TEST);
 

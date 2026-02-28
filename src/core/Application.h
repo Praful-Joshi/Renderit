@@ -4,7 +4,21 @@
 #include <memory>
 
 namespace Core {
-
+/**
+ * @brief Main application class responsible for managing
+ *        window lifecycle and render loop.
+ *
+ * Flow:
+ * 
+ *  - constructor(): Creates a window and stores its pointer
+*                   in m_window.
+ * 
+ *  - run(): OnInit() → mainLoop() → onShutdown()
+ * 
+ *  - mainLoop(): onUpdate() → onRender()
+ *
+ * Creates and owns the Window instance.
+ */
 class Application {
 public:
     Application();

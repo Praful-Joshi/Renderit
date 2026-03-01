@@ -10,59 +10,121 @@
 #include <iostream>
 #include <memory>
 
-class TriangleApp : public Core::Application {
+class CubeApp : public Core::Application {
 protected:
+
     void onInit() override {
         glEnable(GL_DEPTH_TEST);
 
-        // ── Shader ────────────────────────────────────────────────────────────
-        // Paths are relative to where you run the binary (the build/ directory)
-        // so we go up one level to reach assets/
         m_shader = std::make_unique<Renderer::Shader>(
             "../assets/shaders/basic.vert",
             "../assets/shaders/basic.frag"
         );
 
-        // ── Geometry ──────────────────────────────────────────────────────────
-        // One vertex = position (xyz) + color (rgb)
-        // Laid out flat: [ x, y, z, r, g, b,   x, y, z, r, g, b, ... ]
+        // ── Vertex Data ───────────────────────────────────────────────────────
         //
-        // These are in model space — a triangle centered around the origin,
-        // sitting on the XZ plane. Y is up.
+        // 24 vertices: 6 faces × 4 corners each.
+        // Even though a cube has only 8 unique positions, each face needs its
+        // own 4 vertices because they carry different colors. A vertex shared
+        // between two faces can only have one color — so we duplicate positions
+        // and give each copy the color of its face.
+        //
+        // This is the exact same reason OBJ files duplicate vertices —
+        // positions may be shared but UVs and normals differ per face.
+        //
+        // Layout per vertex: [ x, y, z, r, g, b ]  (stride = 24 bytes)
+        //
+        // Face colors:
+        //   Front  = red      Back   = cyan
+        //   Top    = green    Bottom = magenta
+        //   Right  = blue     Left   = yellow
+
         std::vector<float> vertices = {
-        //   position              color
-        //   x      y      z      r     g     b
-             0.0f,  0.5f,  0.0f,  1.0f, 0.3f, 0.3f,  // top    — red
-            -0.5f, -0.5f,  0.0f,  0.3f, 1.0f, 0.3f,  // left   — green
-             0.5f, -0.5f,  0.0f,  0.3f, 0.3f, 1.0f,  // right  — blue
+
+            // ── FRONT FACE (z = +0.5) — red ──────────────────────────────────
+            //      position               color (r,  g,  b)
+            -0.5f,  0.5f,  0.5f,    1.0f, 0.2f, 0.2f,  // 0: top-left
+             0.5f,  0.5f,  0.5f,    1.0f, 0.2f, 0.2f,  // 1: top-right
+             0.5f, -0.5f,  0.5f,    1.0f, 0.2f, 0.2f,  // 2: bottom-right
+            -0.5f, -0.5f,  0.5f,    1.0f, 0.2f, 0.2f,  // 3: bottom-left
+
+            // ── BACK FACE (z = -0.5) — cyan ───────────────────────────────────
+             0.5f,  0.5f, -0.5f,    0.2f, 1.0f, 1.0f,  // 4: top-left  (from back)
+            -0.5f,  0.5f, -0.5f,    0.2f, 1.0f, 1.0f,  // 5: top-right (from back)
+            -0.5f, -0.5f, -0.5f,    0.2f, 1.0f, 1.0f,  // 6: bottom-right
+             0.5f, -0.5f, -0.5f,    0.2f, 1.0f, 1.0f,  // 7: bottom-left
+
+            // ── TOP FACE (y = +0.5) — green ───────────────────────────────────
+            -0.5f,  0.5f, -0.5f,    0.2f, 1.0f, 0.2f,  // 8:  top-left  (from top)
+             0.5f,  0.5f, -0.5f,    0.2f, 1.0f, 0.2f,  // 9:  top-right
+             0.5f,  0.5f,  0.5f,    0.2f, 1.0f, 0.2f,  // 10: bottom-right
+            -0.5f,  0.5f,  0.5f,    0.2f, 1.0f, 0.2f,  // 11: bottom-left
+
+            // ── BOTTOM FACE (y = -0.5) — magenta ──────────────────────────────
+            -0.5f, -0.5f,  0.5f,    1.0f, 0.2f, 1.0f,  // 12: top-left  (from bottom)
+             0.5f, -0.5f,  0.5f,    1.0f, 0.2f, 1.0f,  // 13: top-right
+             0.5f, -0.5f, -0.5f,    1.0f, 0.2f, 1.0f,  // 14: bottom-right
+            -0.5f, -0.5f, -0.5f,    1.0f, 0.2f, 1.0f,  // 15: bottom-left
+
+            // ── RIGHT FACE (x = +0.5) — blue ──────────────────────────────────
+             0.5f,  0.5f,  0.5f,    0.2f, 0.2f, 1.0f,  // 16: top-left  (from right)
+             0.5f,  0.5f, -0.5f,    0.2f, 0.2f, 1.0f,  // 17: top-right
+             0.5f, -0.5f, -0.5f,    0.2f, 0.2f, 1.0f,  // 18: bottom-right
+             0.5f, -0.5f,  0.5f,    0.2f, 0.2f, 1.0f,  // 19: bottom-left
+
+            // ── LEFT FACE (x = -0.5) — yellow ─────────────────────────────────
+            -0.5f,  0.5f, -0.5f,    1.0f, 1.0f, 0.2f,  // 20: top-left  (from left)
+            -0.5f,  0.5f,  0.5f,    1.0f, 1.0f, 0.2f,  // 21: top-right
+            -0.5f, -0.5f,  0.5f,    1.0f, 1.0f, 0.2f,  // 22: bottom-right
+            -0.5f, -0.5f, -0.5f,    1.0f, 1.0f, 0.2f,  // 23: bottom-left
         };
 
-        // Describe the layout of one vertex to the GPU:
-        //   attribute 0: position, 3 floats, starts at byte 0
-        //   attribute 1: color,    3 floats, starts at byte 12 (3 floats × 4 bytes)
+        // ── Index Data ────────────────────────────────────────────────────────
+        //
+        // 36 indices: 6 faces × 2 triangles × 3 vertices
+        //
+        // Each face is a quad (4 vertices). We split it into 2 triangles.
+        // The pattern for each face (local indices 0-3):
+        //
+        //   0 ──── 1
+        //   │  \   │
+        //   │   \  │
+        //   3 ──── 2
+        //
+        //   Triangle 1: 0, 1, 2
+        //   Triangle 2: 0, 2, 3
+        //
+        // Each face's 4 vertices start at: face_index * 4
+
+        std::vector<uint32_t> indices;
+        for (uint32_t face = 0; face < 6; ++face) {
+            uint32_t base = face * 4;
+            indices.push_back(base + 0);
+            indices.push_back(base + 1);
+            indices.push_back(base + 2);
+            indices.push_back(base + 0);
+            indices.push_back(base + 2);
+            indices.push_back(base + 3);
+        }
+
+        // ── Upload to GPU ─────────────────────────────────────────────────────
         std::vector<Renderer::VertexAttribute> attributes = {
-            { 0, 3,  0 },   // a_position
-            { 1, 3, 12 },   // a_color
+            { 0, 3,  0 },   // a_position: 3 floats at byte offset 0
+            { 1, 3, 12 },   // a_color:    3 floats at byte offset 12
         };
-
-        GLsizei stride = 6 * sizeof(float); // 6 floats per vertex = 24 bytes
+        GLsizei stride = 6 * sizeof(float);
 
         m_buffer = std::make_unique<Renderer::Buffer>();
         m_buffer->uploadVertices(vertices, attributes, stride);
+        m_buffer->uploadIndices(indices);
 
         // ── Transforms ────────────────────────────────────────────────────────
-        // Model: identity — triangle sits at world origin, original scale
-        m_model = glm::mat4(1.0f);
-
-        // View: camera at (0,0,3) looking at origin
-        // We use Z=3 (not Z=5) since the triangle is flat on screen — no depth
         m_view = glm::lookAt(
-            glm::vec3(0.0f, 0.0f, 3.0f),  // eye
-            glm::vec3(0.0f, 0.0f, 0.0f),  // center
-            glm::vec3(0.0f, 1.0f, 0.0f)   // up
+            glm::vec3(1.5f, 1.5f, 3.0f),  // slightly up and to the right
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f)
         );
 
-        // Projection: 45° fov, current aspect ratio, near/far planes
         float aspect = static_cast<float>(m_window->getWidth()) /
                        static_cast<float>(m_window->getHeight());
         m_projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
@@ -72,36 +134,32 @@ protected:
         if (isKeyPressed(GLFW_KEY_ESCAPE))
             glfwSetWindowShouldClose(m_window->getNativeWindow(), true);
 
-        // Rotate the model around Y axis over time — demonstrates the model matrix
-        // changing each frame while view and projection stay fixed
-        m_rotation += 45.0f * deltaTime; // 45 degrees per second
+        // Rotate around a diagonal axis so all 6 faces become visible
+        m_rotation += 30.0f * deltaTime;
         m_model = glm::rotate(
             glm::mat4(1.0f),
             glm::radians(m_rotation),
-            glm::vec3(0.0f, 1.0f, 0.0f)  // Y axis
+            glm::vec3(1.0f, 1.0f, 0.0f)
         );
     }
 
     void onRender() override {
         m_shader->bind();
-
-        // Upload the three matrices as uniforms — these travel to the vertex
-        // shader and are used in: gl_Position = projection * view * model * pos
         m_shader->setMat4("u_model",      m_model);
         m_shader->setMat4("u_view",       m_view);
         m_shader->setMat4("u_projection", m_projection);
 
         m_buffer->bind();
 
-        // Draw 3 vertices as one triangle
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // glDrawElements uses the index buffer — fetches vertices by index
+        // instead of sequentially. The last arg is a byte offset into the EBO.
+        glDrawElements(GL_TRIANGLES, m_buffer->indexCount(), GL_UNSIGNED_INT, 0);
 
         m_buffer->unbind();
         m_shader->unbind();
     }
 
     void onShutdown() override {
-        // unique_ptr destructors handle GPU cleanup via Buffer/Shader destructors
         std::cout << "[App] Clean shutdown\n";
     }
 
@@ -118,7 +176,7 @@ private:
 
 int main() {
     try {
-        TriangleApp app;
+        CubeApp app;
         app.run();
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] " << e.what() << "\n";

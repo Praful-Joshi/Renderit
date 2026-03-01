@@ -1,25 +1,30 @@
 #version 330 core
 
-// ── Inputs ────────────────────────────────────────────────────────────────────
-// 'layout(location = 0)' matches VertexAttribute.location = 0 in Buffer setup
+// ── Vertex inputs (match Mesh::Vertex layout and VertexAttribute locations) ──
 layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_color;
+layout(location = 1) in vec2 a_texCoord;
+layout(location = 2) in vec3 a_normal;
 
 // ── Uniforms ──────────────────────────────────────────────────────────────────
-// Set once per draw call from the CPU via shader.setMat4(...)
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 
 // ── Outputs to fragment shader ────────────────────────────────────────────────
-out vec3 v_color;  // 'v_' prefix = varying — interpolated across the triangle
+out vec2 v_texCoord;
+out vec3 v_normal;
+out vec3 v_fragPos;   // world-space position — needed for lighting in Step 5
 
 void main() {
-    // The MVP transform — every 3D renderer in history does this one line
-    // Read right to left: model space → world → view → clip
-    gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+    vec4 worldPos   = u_model * vec4(a_position, 1.0);
+    gl_Position     = u_projection * u_view * worldPos;
 
-    // Pass color through to the fragment shader
-    // The GPU will interpolate this smoothly across the triangle surface
-    v_color = a_color;
+    v_texCoord = a_texCoord;
+    v_fragPos  = vec3(worldPos);
+
+    // Transform normal to world space.
+    // We use the normal matrix (transpose of inverse of model matrix)
+    // to handle non-uniform scaling correctly.
+    // For now this works fine — we'll explain it fully in Step 5.
+    v_normal = mat3(transpose(inverse(u_model))) * a_normal;
 }

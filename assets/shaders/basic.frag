@@ -1,14 +1,28 @@
 #version 330 core
 
-// ── Input from vertex shader ───────────────────────────────────────────────────
-// Same name and type as the vertex shader's 'out' — GPU interpolates between vertices
-in vec3 v_color;
+in vec2 v_texCoord;
+in vec3 v_normal;
+in vec3 v_fragPos;
 
-// ── Output ────────────────────────────────────────────────────────────────────
-// Final RGBA color written to the framebuffer for this pixel
 out vec4 FragColor;
 
 void main() {
-    // 1.0 alpha = fully opaque
-    FragColor = vec4(v_color, 1.0);
+    // Visualize normals as RGB color — a standard debugging technique.
+    //
+    // Normals are in range [-1, 1]. We remap to [0, 1] for display:
+    //   normal.x → red channel   (left/right orientation)
+    //   normal.y → green channel (up/down orientation)
+    //   normal.z → blue channel  (front/back orientation)
+    //
+    // What you'll see:
+    //   Faces pointing right  → reddish
+    //   Faces pointing up     → greenish
+    //   Faces pointing toward camera → bluish
+    //
+    // This is the fastest way to verify your normals are correct
+    // before adding real lighting. If normals are wrong, lighting
+    // will look broken — catching it here saves debugging later.
+
+    vec3 normalColor = normalize(v_normal) * 0.5 + 0.5;
+    FragColor = vec4(normalColor, 1.0);
 }

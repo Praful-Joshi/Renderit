@@ -9,11 +9,9 @@ The goal is not just a working renderer but a professional, modular codebase tha
 ## Roadmap
 
 - [x] **Step 1** — Window/Application architecture (GLFW, GLAD, core engine loop)
-- [x] **Step 2** — First triangle: VAOs, VBOs, vertex and fragment shaders
-<p align="center"> <img src="docs/images/step2.webp" width="500"> </p>
+- [x] **Step 2** — First triangle: VAOs, VBOs, vertex and fragment shaders <p align="center"> <img src="docs/images/step2.webp" width="500"> </p>
 - [ ] **Step 3** — Texturing: UVs, stb_image, texture units
-- [x] **Step 4** — OBJ model loading (manual parser)
-<p align="center"> <img src="docs/images/step4.webp" width="500"> </p>
+- [x] **Step 4** — OBJ model loading (manual parser) <p align="center"> <img src="docs/images/step4.webp" width="500"> </p>
 - [ ] **Step 5** — Blinn-Phong lighting: normals, diffuse, specular, ambient
 - [ ] **Step 6** — Assimp model loader + material system
 - [ ] **Step 7** — Normal mapping (TBN matrix, tangent space)

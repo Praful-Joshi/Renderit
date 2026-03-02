@@ -1,18 +1,17 @@
 #include "Mesh.h"
 #include <glad/glad.h>
 
-namespace Renderer {
+namespace Renderer
+{
 
-Mesh::Mesh(const std::vector<Vertex>& vertices,
-           const std::vector<uint32_t>& indices)
+Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
 {
     m_vertexCount = vertices.size();
     m_indexCount  = indices.size();
     setupBuffer(vertices, indices);
 }
 
-void Mesh::setupBuffer(const std::vector<Vertex>& vertices,
-                       const std::vector<uint32_t>& indices)
+void Mesh::setupBuffer(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
 {
     // Convert our typed Vertex structs into a flat float array for upload.
     // The GPU just sees bytes — we describe the layout via VertexAttributes.
@@ -27,7 +26,8 @@ void Mesh::setupBuffer(const std::vector<Vertex>& vertices,
     std::vector<float> flatData;
     flatData.reserve(vertices.size() * 8); // 8 floats per vertex
 
-    for (const auto& v : vertices) {
+    for (const auto& v : vertices)
+    {
         flatData.push_back(v.position.x);
         flatData.push_back(v.position.y);
         flatData.push_back(v.position.z);
@@ -43,9 +43,9 @@ void Mesh::setupBuffer(const std::vector<Vertex>& vertices,
     //   location 1 = texCoord: 2 floats, offset 12  (3 × 4 bytes)
     //   location 2 = normal:   3 floats, offset 20  (3+2) × 4 bytes)
     std::vector<VertexAttribute> attributes = {
-        { 0, 3,  0 },   // a_position
-        { 1, 2, 12 },   // a_texCoord
-        { 2, 3, 20 },   // a_normal
+        {0, 3, 0},  // a_position
+        {1, 2, 12}, // a_texCoord
+        {2, 3, 20}, // a_normal
     };
 
     GLsizei stride = sizeof(Vertex); // 32 bytes
@@ -54,16 +54,14 @@ void Mesh::setupBuffer(const std::vector<Vertex>& vertices,
     m_buffer.uploadIndices(indices);
 }
 
-void Mesh::draw(const Shader& shader) const {
+void Mesh::draw(const Shader& shader) const
+{
     // Shader is already bound by the caller — Mesh just binds its geometry
     // and issues the draw call. This keeps draw() fast and simple.
     (void)shader; // reserved for texture binding in Step 3
 
     m_buffer.bind();
-    glDrawElements(GL_TRIANGLES,
-                   static_cast<GLsizei>(m_indexCount),
-                   GL_UNSIGNED_INT,
-                   0);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(m_indexCount), GL_UNSIGNED_INT, 0);
     m_buffer.unbind();
 }
 

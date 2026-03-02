@@ -3,8 +3,10 @@
 #include <glad/glad.h>
 #include <iostream>
 
-namespace Core {
-Application::Application() {
+namespace Core
+{
+Application::Application()
+{
     WindowConfig config;
     config.width  = 800;
     config.height = 600;
@@ -14,14 +16,17 @@ Application::Application() {
     m_window = std::make_unique<Window>(config);
 }
 
-void Application::run() {
+void Application::run()
+{
     onInit();
     mainLoop();
     onShutdown();
 }
 
-void Application::mainLoop() {
-    while (!m_window->shouldClose()) {
+void Application::mainLoop()
+{
+    while (!m_window->shouldClose())
+    {
         float deltaTime = calcDeltaTime();
 
         m_window->pollEvents();
@@ -36,14 +41,16 @@ void Application::mainLoop() {
     }
 }
 
-float Application::calcDeltaTime() {
+float Application::calcDeltaTime()
+{
     float currentTime = static_cast<float>(glfwGetTime());
     float delta       = currentTime - m_lastFrameTime;
     m_lastFrameTime   = currentTime;
     return delta;
 }
 
-bool Application::isKeyPressed(int glfwKey) const {
+bool Application::isKeyPressed(int glfwKey) const
+{
     return glfwGetKey(m_window->getNativeWindow(), glfwKey) == GLFW_PRESS;
 }
 

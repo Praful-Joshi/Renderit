@@ -5,50 +5,96 @@
 
 #include <glm/glm.hpp>
 #include <vector>
-#include <string>
 
-namespace Renderer {
+namespace Renderer
+{
 
-// One vertex: the interleaved data layout we upload to the GPU.
-// Having a struct makes it clear what a vertex IS rather than
-// treating it as a raw bag of floats.
-struct Vertex {
-    glm::vec3 position;
-    glm::vec2 texCoord;   // UV — needed for textures (Step 3)
-    glm::vec3 normal;     // needed for lighting (Step 5)
+/**
+ * @struct Vertex
+ * @brief Interleaved vertex format used by Mesh.
+ *
+ * @details
+ * Layout in memory:
+ *  - position (vec3)
+ *  - texCoord (vec2)
+ *  - normal   (vec3)
+ *
+ * Total size: 32 bytes.
+ */
+struct Vertex
+{
+    glm::vec3 position; ///< World-space position.
+    glm::vec2 texCoord; ///< Texture coordinates (UV).
+    glm::vec3 normal;   ///< Vertex normal for lighting.
 };
 
-// A Mesh is one drawable unit of geometry.
-// It owns its GPU buffers and knows how to draw itself given a shader.
-// This is the atom everything else (Model, Scene) is built from.
-class Mesh {
-public:
-    Mesh(const std::vector<Vertex>& vertices,
-         const std::vector<uint32_t>& indices);
+/**
+ * @class Mesh
+ * @brief Represents a single drawable geometry unit.
+ *
+ * @details
+ * A Mesh:
+ *  - Owns a GPU buffer (VAO/VBO/EBO via Buffer)
+ *  - Uploads vertex + index data on construction
+ *  - Knows how to issue its draw call
+ *
+ * Ownership:
+ *  - Owns its Buffer
+ *  - Non-copyable (GPU resource owner)
+ *  - Movable
+ *
+ * Contract:
+ *  - Shader must be bound before calling draw().
+ */
+class Mesh
+{
+  public:
+    /**
+     * @brief Constructs a mesh and uploads geometry to GPU.
+     *
+     * @param vertices Vertex array (interleaved format).
+     * @param indices Index buffer for indexed drawing.
+     */
+    Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 
-    // Non-copyable — owns GPU resources
     Mesh(const Mesh&)            = delete;
     Mesh& operator=(const Mesh&) = delete;
 
-    // Movable
     Mesh(Mesh&&)            = default;
     Mesh& operator=(Mesh&&) = default;
 
-    // Upload geometry to GPU and issue the draw call.
-    // Shader must already be bound before calling draw().
+    /**
+     * @brief Issues draw call for this mesh.
+     *
+     * @param shader Shader program (must already be bound).
+     */
     void draw(const Shader& shader) const;
 
-    // Accessors for debugging / bounding box computation later
-    size_t vertexCount() const { return m_vertexCount; }
-    size_t indexCount()  const { return m_indexCount; }
+    /**
+     * @return Number of vertices.
+     */
+    size_t vertexCount() const
+    {
+        return m_vertexCount;
+    }
 
-private:
-    void setupBuffer(const std::vector<Vertex>& vertices,
-                     const std::vector<uint32_t>& indices);
+    /**
+     * @return Number of indices.
+     */
+    size_t indexCount() const
+    {
+        return m_indexCount;
+    }
 
-    Buffer m_buffer;
-    size_t m_vertexCount = 0;
-    size_t m_indexCount  = 0;
+  private:
+    /**
+     * @brief Converts vertices to flat format and uploads to GPU.
+     */
+    void setupBuffer(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+
+    Buffer m_buffer;          ///< Owned GPU buffer.
+    size_t m_vertexCount = 0; ///< CPU-side vertex count.
+    size_t m_indexCount  = 0; ///< CPU-side index count.
 };
 
 } // namespace Renderer

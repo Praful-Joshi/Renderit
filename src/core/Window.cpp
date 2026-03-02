@@ -2,9 +2,11 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace Core {
+namespace Core
+{
 
-Window::Window(const WindowConfig& config) : m_config(config) {
+Window::Window(const WindowConfig& config) : m_config(config)
+{
     glfwSetErrorCallback(errorCallback);
 
     if (!glfwInit())
@@ -16,14 +18,11 @@ Window::Window(const WindowConfig& config) : m_config(config) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // Required on macOS
 
-    m_glWindow = glfwCreateWindow(
-        m_config.width,
-        m_config.height,
-        m_config.title.c_str(),
-        nullptr, nullptr
-    );
+    m_glWindow =
+        glfwCreateWindow(m_config.width, m_config.height, m_config.title.c_str(), nullptr, nullptr);
 
-    if (!m_glWindow) {
+    if (!m_glWindow)
+    {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window");
     }
@@ -46,46 +45,54 @@ Window::Window(const WindowConfig& config) : m_config(config) {
 
     // Print context info
     std::cout << "[Window] OpenGL " << glGetString(GL_VERSION) << "\n";
-    std::cout << "[Window] GPU: "   << glGetString(GL_RENDERER) << "\n";
+    std::cout << "[Window] GPU: " << glGetString(GL_RENDERER) << "\n";
 }
 
-Window::~Window() {
+Window::~Window()
+{
     if (m_glWindow)
         glfwDestroyWindow(m_glWindow);
     glfwTerminate();
 }
 
-bool Window::shouldClose() const {
+bool Window::shouldClose() const
+{
     return glfwWindowShouldClose(m_glWindow);
 }
 
-void Window::swapBuffers() const {
+void Window::swapBuffers() const
+{
     glfwSwapBuffers(m_glWindow);
 }
 
-void Window::pollEvents() const {
+void Window::pollEvents() const
+{
     glfwPollEvents();
 }
 
-void Window::setTitle(const std::string& title) {
+void Window::setTitle(const std::string& title)
+{
     m_config.title = title;
     glfwSetWindowTitle(m_glWindow, title.c_str());
 }
 
-float Window::getAspectRatio() const {
+float Window::getAspectRatio() const
+{
     return static_cast<float>(m_config.width) / static_cast<float>(m_config.height);
 }
 
 // Static callback — GLFW calls this when the window is resized
-void Window::framebufferSizeCallback(GLFWwindow* window, int width, int height) {
+void Window::framebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
     // Retrieve our Window instance from the GLFW user pointer
-    auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    auto* self            = static_cast<Window*>(glfwGetWindowUserPointer(window));
     self->m_config.width  = width;
     self->m_config.height = height;
     glViewport(0, 0, width, height);
 }
 
-void Window::errorCallback(int error, const char* description) {
+void Window::errorCallback(int error, const char* description)
+{
     std::cerr << "[GLFW Error " << error << "] " << description << "\n";
 }
 

@@ -21,39 +21,39 @@ Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
     GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);
 
     // Link both compiled stages into a program
-    m_programID = glCreateProgram();
-    glAttachShader(m_programID, vertShader);
-    glAttachShader(m_programID, fragShader);
-    glLinkProgram(m_programID);
-    checkLinkErrors(m_programID);
+    m_glShaderProgramID = glCreateProgram();
+    glAttachShader(m_glShaderProgramID, vertShader);
+    glAttachShader(m_glShaderProgramID, fragShader);
+    glLinkProgram(m_glShaderProgramID);
+    checkLinkErrors(m_glShaderProgramID);
 
     // Compiled stages are now baked into the program — release them
     glDeleteShader(vertShader);
     glDeleteShader(fragShader);
 
-    std::cout << "[Shader] Linked program " << m_programID << " (" << vertexPath << ", "
+    std::cout << "[Shader] Linked program " << m_glShaderProgramID << " (" << vertexPath << ", "
               << fragmentPath << ")\n";
 }
 
 Shader::~Shader()
 {
-    if (m_programID)
-        glDeleteProgram(m_programID);
+    if (m_glShaderProgramID)
+        glDeleteProgram(m_glShaderProgramID);
 }
 
-Shader::Shader(Shader&& other) noexcept : m_programID(other.m_programID)
+Shader::Shader(Shader&& other) noexcept : m_glShaderProgramID(other.m_glShaderProgramID)
 {
-    other.m_programID = 0; // transfer ownership, invalidate source
+    other.m_glShaderProgramID = 0; // transfer ownership, invalidate source
 }
 
 Shader& Shader::operator=(Shader&& other) noexcept
 {
     if (this != &other)
     {
-        if (m_programID)
-            glDeleteProgram(m_programID);
-        m_programID       = other.m_programID;
-        other.m_programID = 0;
+        if (m_glShaderProgramID)
+            glDeleteProgram(m_glShaderProgramID);
+        m_glShaderProgramID       = other.m_glShaderProgramID;
+        other.m_glShaderProgramID = 0;
     }
     return *this;
 }
@@ -64,7 +64,7 @@ Shader& Shader::operator=(Shader&& other) noexcept
 
 void Shader::bind() const
 {
-    glUseProgram(m_programID);
+    glUseProgram(m_glShaderProgramID);
 }
 void Shader::unbind() const
 {
@@ -174,7 +174,7 @@ GLint Shader::getUniformLocation(const std::string& name) const
     // uniform is wasteful. A proper cache would store results in an
     // unordered_map<string, GLint>. We keep it simple for now and will
     // add the cache in the ResourceManager step.
-    GLint location = glGetUniformLocation(m_programID, name.c_str());
+    GLint location = glGetUniformLocation(m_glShaderProgramID, name.c_str());
     if (location == -1)
         std::cerr << "[Shader] Warning: uniform '" << name << "' not found\n";
     return location;

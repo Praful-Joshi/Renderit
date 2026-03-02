@@ -1,0 +1,24 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run OpenGLRenderer",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/OpenGLRenderer",
+            "args": [],
+            "cwd": "${workspaceFolder}/build",
+            "preLaunchTask": "cmake-build"
+        },
+        {
+            "name": "Debug OpenGLRenderer",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/OpenGLRenderer",
+            "args": [],
+            "cwd": "${workspaceFolder}/build",
+            "preLaunchTask": "cmake-build",
+            "stopOnEntry": false
+        }
+    ]
+}

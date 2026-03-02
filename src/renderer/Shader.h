@@ -10,8 +10,7 @@ namespace Renderer
 /**
  * @class Shader
  * @brief RAII wrapper around an OpenGL shader program.
- *
- * @details
+ * 
  * Responsible for:
  *  - Reading GLSL files from disk
  *  - Compiling vertex and fragment shaders
@@ -61,7 +60,7 @@ class Shader
      */
     GLuint getID() const
     {
-        return m_programID;
+        return m_glShaderProgramID;
     }
 
     /// Uniform setters
@@ -75,7 +74,7 @@ class Shader
     void setMat4(const std::string& name, const glm::mat4& value) const;
 
   private:
-    GLuint m_programID = 0;
+    GLuint m_glShaderProgramID = 0;
 
     static std::string readFile(const std::string& path);
     static GLuint      compileShader(GLenum type, const std::string& source);

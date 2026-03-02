@@ -12,7 +12,7 @@
 #include <memory>
 #include <vector>
 
-class CottageApp : public Core::Application
+class ObjApp : public Core::Application
 {
   protected:
     void onInit() override
@@ -95,7 +95,7 @@ int main()
 {
     try
     {
-        CottageApp app;
+        ObjApp app;
         app.run();
     }
     catch (const std::exception& e)

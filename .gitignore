@@ -32,6 +32,7 @@ external
 *.obj
 *.fbx
 *.blend
+*.dae
 *.png
 *.jpg
 *.jpeg

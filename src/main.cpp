@@ -26,7 +26,7 @@ class ObjApp : public Core::Application
         // ── Load OBJ ──────────────────────────────────────────────────────────
         // Path is relative to the build/ directory where the binary runs.
         // Your cottage obj folder should be at the project root.
-        m_meshes = Scene::ObjLoader::load("../85-cottage_obj/cottage_obj.obj");
+        m_meshes = Scene::ObjLoader::load("../models/cottage/cottage_obj.obj");
 
         if (m_meshes.empty())
         {

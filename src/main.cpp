@@ -24,11 +24,11 @@ protected:
 
         // Load model via Assimp — works with OBJ, FBX, GLTF, and 40+ other formats.
         // The MTL file is parsed automatically, textures loaded relative to model path.
-        m_model = Scene::AssimpLoader::load("../models/cube/model.dae");
+        m_model = Scene::AssimpLoader::load("../models/cottage/cottage_obj.obj");
 
-        // Camera
+        m_model->setScale(0.1f);        // Camera
         m_view = glm::lookAt(
-            glm::vec3(5.0f, 3.0f, 10.0f),
+            glm::vec3(5.0f, 3.0f, 3.0f),
             glm::vec3(0.0f, 1.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );

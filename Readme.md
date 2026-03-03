@@ -10,14 +10,13 @@ The goal is not just a working renderer but a professional, modular codebase tha
 
 - [x] **Step 1** — Window/Application architecture (GLFW, GLAD, core engine loop)
 - [x] **Step 2** — First cube: VAOs, VBOs, vertex and fragment shaders <p align="center"> <img src="docs/images/step2.webp" width="500"> </p>
-- [x] **Step 3** — OBJ model loading (manual parser) <p align="center"> <img src="docs/images/step3.webp" width="500"> </p>
+- [x] **Step 3** — Assimp model loader + material system <p align="center"> <img src="docs/images/step3.webp" width="500"> </p>
 - [x] **Step 4** — Texturing: UVs, stb_image, texture units <p align="center"> <img src="docs/images/step4.webp" width="500"> </p>
-- [x] **Step 5** — Assimp model loader + material system
-- [ ] **Step 6** — Blinn-Phong lighting: normals, diffuse, specular, ambient
-- [ ] **Step 7** — Normal mapping (TBN matrix, tangent space)
-- [ ] **Step 8** — PBR shading: Cook-Torrance BRDF, metallic/roughness workflow
-- [ ] **Step 9** — Shadow mapping
-- [ ] **Step 10** — Framebuffers: HDR, bloom, post-processing stack
+- [ ] **Step 5** — Blinn-Phong lighting: normals, diffuse, specular, ambient
+- [ ] **Step 6** — Normal mapping (TBN matrix, tangent space)
+- [ ] **Step 7** — PBR shading: Cook-Torrance BRDF, metallic/roughness workflow
+- [ ] **Step 8** — Shadow mapping
+- [ ] **Step 9** — Framebuffers: HDR, bloom, post-processing stack
 
 ---
 

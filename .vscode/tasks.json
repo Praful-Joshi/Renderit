@@ -1,25 +1,78 @@
 {
     "version": "2.0.0",
     "tasks": [
+
+        // ── Renderer ──────────────────────────────────────────────────────────
+
         {
-            "label": "cmake-build",
+            "label": "Build Renderer",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "${workspaceFolder}/build",
-                "--config",
-                "Debug"
-            ],
+            "command": "cmake --build '${workspaceFolder}/build' --target OpenGLRenderer",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
             "presentation": {
                 "reveal": "always",
-                "panel": "shared"
+                "panel": "shared",
+                "clear": true
             },
             "problemMatcher": ["$gcc"]
+        },
+
+        {
+            "label": "Run Renderer",
+            "type": "shell",
+            "command": "cd '${workspaceFolder}/build' && ./OpenGLRenderer",
+            "dependsOn": "Build Renderer",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+
+        // ── Sandbox ───────────────────────────────────────────────────────────
+
+        {
+            "label": "Build Sandbox",
+            "type": "shell",
+            "command": "cmake --build '${workspaceFolder}/build' --target Sandbox",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": ["$gcc"]
+        },
+
+        {
+            "label": "Run Sandbox",
+            "type": "shell",
+            "command": "cd '${workspaceFolder}/build' && ./Sandbox",
+            "dependsOn": "Build Sandbox",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+
+        // ── CMake Configure ───────────────────────────────────────────────────
+        // Run after adding/removing .cpp files or changing CMakeLists.txt
+
+        {
+            "label": "CMake Configure",
+            "type": "shell",
+            "command": "cmake -S '${workspaceFolder}' -B '${workspaceFolder}/build'",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
         }
     ]
 }

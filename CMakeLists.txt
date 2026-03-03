@@ -13,7 +13,7 @@ find_package(assimp REQUIRED)
 add_library(glad STATIC external/glad/src/glad.c)
 target_include_directories(glad PUBLIC external/glad/include)
 
-# Collect all .cpp files under src/ automatically
+# ── Main renderer ─────────────────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -34,3 +34,31 @@ target_link_libraries(${PROJECT_NAME}
     "-framework IOKit"
     "-framework CoreVideo"
 )
+
+# ── Sandbox ───────────────────────────────────────────────────────────────────
+# Standalone single-file target for quick prototyping and demos.
+# Has the same external dependencies but zero coupling to src/.
+#
+# Build only sandbox:  cmake --build build --target Sandbox
+# Run it:              ./build/Sandbox
+#
+# The if(EXISTS) guard means CMake won't error if the file doesn't exist yet —
+# just create sandbox/sandbox.cpp and re-run cmake to activate it.
+if(EXISTS "${CMAKE_SOURCE_DIR}/sandbox/sandbox.cpp")
+    add_executable(Sandbox sandbox/sandbox.cpp)
+
+    target_include_directories(Sandbox PRIVATE
+        external/glad/include
+        external/stb
+    )
+
+    target_link_libraries(Sandbox
+        glad
+        glfw
+        glm::glm
+        OpenGL::GL
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+    )
+endif()

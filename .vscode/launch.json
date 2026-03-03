@@ -2,23 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run OpenGLRenderer",
+            "name": "Debug Renderer",
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/build/OpenGLRenderer",
             "args": [],
             "cwd": "${workspaceFolder}/build",
-            "preLaunchTask": "cmake-build"
+            "preLaunchTask": "Build Renderer"
         },
         {
-            "name": "Debug OpenGLRenderer",
+            "name": "Debug Sandbox",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/OpenGLRenderer",
+            "program": "${workspaceFolder}/build/Sandbox",
             "args": [],
             "cwd": "${workspaceFolder}/build",
-            "preLaunchTask": "cmake-build",
-            "stopOnEntry": false
+            "preLaunchTask": "Build Sandbox"
         }
     ]
 }

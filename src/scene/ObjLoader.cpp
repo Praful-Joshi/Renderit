@@ -1,159 +1,208 @@
 #include "ObjLoader.h"
 
 #include <fstream>
-#include <iostream>
 #include <sstream>
+#include <iostream>
 #include <unordered_map>
 
-namespace Scene
-{
+namespace Scene {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  load() — main entry point
+//  loadMaterials — parse .mtl file, load textures
 // ─────────────────────────────────────────────────────────────────────────────
 
-std::vector<std::unique_ptr<Renderer::Mesh>> ObjLoader::load(const std::string& path)
+std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>
+ObjLoader::loadMaterials(const std::string& mtlPath, const std::string& baseDir)
 {
-    std::ifstream file(path);
-    if (!file.is_open())
-    {
-        std::cerr << "[ObjLoader] Cannot open: " << path << "\n";
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>> materials;
+
+    std::ifstream file(mtlPath);
+    if (!file.is_open()) {
+        std::cerr << "[ObjLoader] Warning: cannot open MTL: " << mtlPath << "\n";
+        return materials;
+    }
+
+    std::cout << "[ObjLoader] Parsing MTL: " << mtlPath << "\n";
+
+    // Texture cache — if two materials reference the same image file,
+    // we load it once and share the same Texture object via shared_ptr.
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>> textureCache;
+
+    std::string currentMaterial;
+    std::string line;
+
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream ss(line);
+        std::string token;
+        ss >> token;
+
+        // "newmtl" — start of a new material definition
+        if (token == "newmtl") {
+            ss >> currentMaterial;
+        }
+
+        // "map_Kd" — diffuse texture map for the current material
+        // This is the main color/albedo texture we want right now.
+        // Other maps (map_Bump, map_Ks, etc.) we'll handle in later steps.
+        else if (token == "map_Kd" && !currentMaterial.empty()) {
+            std::string texFile;
+            ss >> texFile;
+
+            // Build full path: texture files sit next to the .mtl file
+            std::string fullPath = baseDir + "/" + texFile;
+
+            // Check cache first
+            auto cacheIt = textureCache.find(fullPath);
+            if (cacheIt != textureCache.end()) {
+                materials[currentMaterial] = cacheIt->second;
+                std::cout << "[ObjLoader]   Material '" << currentMaterial
+                          << "' reusing cached texture: " << texFile << "\n";
+            } else {
+                try {
+                    auto tex = std::make_shared<Renderer::Texture>(fullPath);
+                    textureCache[fullPath]         = tex;
+                    materials[currentMaterial]     = tex;
+                } catch (const std::exception& e) {
+                    std::cerr << "[ObjLoader]   Warning: " << e.what() << "\n";
+                    // Continue — mesh will render without texture
+                }
+            }
+        }
+    }
+
+    return materials;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  load — main entry point
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::vector<std::unique_ptr<Renderer::Mesh>>
+ObjLoader::load(const std::string& objPath)
+{
+    std::ifstream file(objPath);
+    if (!file.is_open()) {
+        std::cerr << "[ObjLoader] Cannot open: " << objPath << "\n";
         return {};
     }
 
-    std::cout << "[ObjLoader] Loading: " << path << "\n";
+    std::cout << "[ObjLoader] Loading: " << objPath << "\n";
 
-    // ── Step 1: Read all raw data from the file ───────────────────────────────
-    // OBJ stores three completely separate arrays.
-    // We read them all first before processing any faces.
+    // Extract the directory containing the .obj file.
+    // All relative paths in the .mtl are resolved from here.
+    std::string baseDir = ".";
+    size_t lastSlash = objPath.find_last_of("/\\");
+    if (lastSlash != std::string::npos)
+        baseDir = objPath.substr(0, lastSlash);
+
+    // Material name → Texture, populated when we hit "mtllib"
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>> materials;
+
     ObjData data;
 
-    // ── Step 2: Build interleaved vertices ───────────────────────────────────
-    // The key insight: each unique (posIdx, uvIdx, normIdx) combination
-    // becomes one entry in our final vertex array.
-    // This map tracks which combinations we've already seen.
     std::unordered_map<FaceVertex, uint32_t, FaceVertexHash> vertexCache;
-
-    std::vector<Renderer::Vertex>                currentVertices;
-    std::vector<uint32_t>                        currentIndices;
+    std::vector<Renderer::Vertex>              currentVertices;
+    std::vector<uint32_t>                      currentIndices;
     std::vector<std::unique_ptr<Renderer::Mesh>> meshes;
 
-    std::string currentMaterial = "";
+    std::string currentMaterial;
     std::string line;
 
-    auto flushMesh = [&]()
-    {
-        // If we have geometry accumulated, build a Mesh from it
-        if (!currentIndices.empty())
-        {
-            std::cout << "[ObjLoader]   Mesh '" << currentMaterial
-                      << "': " << currentVertices.size() << " vertices, " << currentIndices.size()
-                      << " indices\n";
-            meshes.push_back(std::make_unique<Renderer::Mesh>(currentVertices, currentIndices));
-            currentVertices.clear();
-            currentIndices.clear();
-            vertexCache.clear();
-        }
+    auto flushMesh = [&]() {
+        if (currentIndices.empty()) return;
+
+        // Look up the texture for this material (may be nullptr — that's fine)
+        std::shared_ptr<Renderer::Texture> tex;
+        auto matIt = materials.find(currentMaterial);
+        if (matIt != materials.end())
+            tex = matIt->second;
+
+        std::cout << "[ObjLoader]   Mesh '" << currentMaterial << "': "
+                  << currentVertices.size() << " vertices, "
+                  << currentIndices.size()  << " indices"
+                  << (tex ? " [textured]" : " [no texture]") << "\n";
+
+        meshes.push_back(
+            std::make_unique<Renderer::Mesh>(currentVertices, currentIndices, tex)
+        );
+
+        currentVertices.clear();
+        currentIndices.clear();
+        vertexCache.clear();
     };
 
-    while (std::getline(file, line))
-    {
-        // Skip empty lines and comments
-        if (line.empty() || line[0] == '#')
-            continue;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
 
         std::istringstream ss(line);
-        std::string        token;
+        std::string token;
         ss >> token;
 
-        // ── "v" — vertex position ─────────────────────────────────────────
-        if (token == "v")
-        {
+        if (token == "mtllib") {
+            // Load the material library immediately so materials are
+            // available when we start processing faces.
+            std::string mtlFile;
+            ss >> mtlFile;
+            materials = loadMaterials(baseDir + "/" + mtlFile, baseDir);
+        }
+
+        else if (token == "v") {
             glm::vec3 pos;
             ss >> pos.x >> pos.y >> pos.z;
             data.positions.push_back(pos);
         }
 
-        // ── "vt" — texture coordinate (UV) ───────────────────────────────
-        else if (token == "vt")
-        {
+        else if (token == "vt") {
             glm::vec2 uv;
             ss >> uv.x >> uv.y;
-            // OBJ UVs have origin at bottom-left, OpenGL textures have origin
-            // at top-left. Flip V to correct the orientation.
-            uv.y = 1.0f - uv.y;
+            uv.y = 1.0f - uv.y;  // flip V: OBJ origin is bottom-left, OpenGL top-left
             data.texCoords.push_back(uv);
         }
 
-        // ── "vn" — vertex normal ──────────────────────────────────────────
-        else if (token == "vn")
-        {
-            glm::vec3 normal;
-            ss >> normal.x >> normal.y >> normal.z;
-            data.normals.push_back(normal);
+        else if (token == "vn") {
+            glm::vec3 n;
+            ss >> n.x >> n.y >> n.z;
+            data.normals.push_back(n);
         }
 
-        // ── "usemtl" — material switch → flush current mesh, start new ───
-        else if (token == "usemtl")
-        {
+        else if (token == "usemtl") {
             flushMesh();
             ss >> currentMaterial;
         }
 
-        // ── "f" — face ────────────────────────────────────────────────────
-        else if (token == "f")
-        {
-            // Get the rest of the line for face parsing
+        else if (token == "f") {
             std::string rest;
             std::getline(ss, rest);
-
             std::vector<FaceVertex> faceVerts = parseFaceLine(rest);
 
-            // Fan triangulation for polygons with more than 3 vertices.
-            // A quad (4 verts) becomes 2 triangles: (0,1,2) and (0,2,3)
-            // A pentagon (5 verts) becomes 3 triangles: (0,1,2),(0,2,3),(0,3,4)
-            // This is called "fan triangulation" — always anchored at vertex 0.
-            for (size_t i = 1; i + 1 < faceVerts.size(); ++i)
-            {
-                // Each triangle in the fan: vertex 0, vertex i, vertex i+1
-                for (const FaceVertex& fv : {faceVerts[0], faceVerts[i], faceVerts[i + 1]})
-                {
+            // Fan triangulation for quads and n-gons
+            for (size_t i = 1; i + 1 < faceVerts.size(); ++i) {
+                for (const FaceVertex& fv : {faceVerts[0], faceVerts[i], faceVerts[i+1]}) {
 
-                    // Check if this exact combination already exists
                     auto it = vertexCache.find(fv);
-                    if (it != vertexCache.end())
-                    {
-                        // Already seen — reuse the existing index
+                    if (it != vertexCache.end()) {
                         currentIndices.push_back(it->second);
-                    }
-                    else
-                    {
-                        // New combination — create a new interleaved vertex
-
+                    } else {
                         Renderer::Vertex vertex;
 
-                        // OBJ indices are 1-based — subtract 1 for C++ arrays
-                        // Negative indices in OBJ mean "relative to end" —
-                        // e.g., -1 means last added. Handle both cases.
-                        auto resolveIdx = [](int idx, int size) -> int
-                        { return idx < 0 ? size + idx : idx - 1; };
+                        auto resolveIdx = [](int idx, int size) -> int {
+                            return idx < 0 ? size + idx : idx - 1;
+                        };
 
-                        vertex.position =
-                            data.positions[resolveIdx(fv.posIdx, data.positions.size())];
+                        vertex.position = data.positions[
+                            resolveIdx(fv.posIdx, (int)data.positions.size())];
 
                         if (fv.uvIdx != 0 && !data.texCoords.empty())
-                        {
-                            vertex.texCoord =
-                                data.texCoords[resolveIdx(fv.uvIdx, data.texCoords.size())];
-                        }
+                            vertex.texCoord = data.texCoords[
+                                resolveIdx(fv.uvIdx, (int)data.texCoords.size())];
 
                         if (fv.normIdx != 0 && !data.normals.empty())
-                        {
-                            vertex.normal =
-                                data.normals[resolveIdx(fv.normIdx, data.normals.size())];
-                        }
+                            vertex.normal = data.normals[
+                                resolveIdx(fv.normIdx, (int)data.normals.size())];
 
-                        uint32_t newIndex = static_cast<uint32_t>(currentVertices.size());
+                        uint32_t newIndex = (uint32_t)currentVertices.size();
                         currentVertices.push_back(vertex);
                         vertexCache[fv] = newIndex;
                         currentIndices.push_back(newIndex);
@@ -161,14 +210,8 @@ std::vector<std::unique_ptr<Renderer::Mesh>> ObjLoader::load(const std::string& 
                 }
             }
         }
-
-        // Lines we intentionally skip:
-        //   "mtllib" — material library filename (we'll use in Step 3)
-        //   "o", "g" — object/group names (informational)
-        //   "s"      — smooth shading flag (we use per-vertex normals instead)
     }
 
-    // Flush the last mesh (no trailing "usemtl" to trigger it)
     flushMesh();
 
     std::cout << "[ObjLoader] Done. " << meshes.size() << " mesh(es) loaded.\n";
@@ -176,57 +219,35 @@ std::vector<std::unique_ptr<Renderer::Mesh>> ObjLoader::load(const std::string& 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  parseFaceLine — parse one "f" line into a list of FaceVertex
+//  Face parsing helpers — unchanged from before
 // ─────────────────────────────────────────────────────────────────────────────
 
-std::vector<ObjLoader::FaceVertex> ObjLoader::parseFaceLine(const std::string& line)
+std::vector<ObjLoader::FaceVertex>
+ObjLoader::parseFaceLine(const std::string& line)
 {
     std::vector<FaceVertex> result;
-    std::istringstream      ss(line);
-    std::string             token;
-
+    std::istringstream ss(line);
+    std::string token;
     while (ss >> token)
-    {
         result.push_back(parseFaceVertex(token));
-    }
-
     return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  parseFaceVertex — parse one "v/vt/vn" token
-// ─────────────────────────────────────────────────────────────────────────────
-
-ObjLoader::FaceVertex ObjLoader::parseFaceVertex(const std::string& token)
+ObjLoader::FaceVertex
+ObjLoader::parseFaceVertex(const std::string& token)
 {
-    // Possible formats:
-    //   "1"        → position only
-    //   "1/2"      → position/texcoord
-    //   "1/2/3"    → position/texcoord/normal
-    //   "1//3"     → position//normal (no texcoord — note the double slash)
-
-    FaceVertex        fv;
+    FaceVertex fv;
     std::stringstream ss(token);
-    std::string       part;
+    std::string part;
 
-    // Read position index (always present)
     std::getline(ss, part, '/');
-    if (!part.empty())
-        fv.posIdx = std::stoi(part);
+    if (!part.empty()) fv.posIdx = std::stoi(part);
 
-    // Read texcoord index (may be empty in "1//3" case)
     if (std::getline(ss, part, '/'))
-    {
-        if (!part.empty())
-            fv.uvIdx = std::stoi(part);
-    }
+        if (!part.empty()) fv.uvIdx = std::stoi(part);
 
-    // Read normal index (may not be present at all)
     if (std::getline(ss, part, '/'))
-    {
-        if (!part.empty())
-            fv.normIdx = std::stoi(part);
-    }
+        if (!part.empty()) fv.normIdx = std::stoi(part);
 
     return fv;
 }

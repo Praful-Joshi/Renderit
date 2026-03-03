@@ -36,8 +36,8 @@ class ObjApp : public Core::Application
         // ── Camera and projection ─────────────────────────────────────────────
         // The cottage may be large — we position the camera further back.
         // We'll adjust once we see the model.
-        m_view = glm::lookAt(glm::vec3(0.0f, 3.0f, 100.0f), // camera position
-                             glm::vec3(0.0f, 1.0f, 0.0f),   // look at slightly above origin
+        m_view = glm::lookAt(glm::vec3(0.0f, 8.0f, 70.0f), // camera position
+                             glm::vec3(0.0f, 0.0f, 0.0f),   // look at slightly above origin
                              glm::vec3(0.0f, 1.0f, 0.0f)    // up
         );
 

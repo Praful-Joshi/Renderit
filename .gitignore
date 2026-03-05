@@ -28,7 +28,6 @@ OpenGLRenderer
 # ─────────────────────────────────────────
 assets/models/
 assets/textures/
-external
 *.obj
 *.fbx
 *.blend

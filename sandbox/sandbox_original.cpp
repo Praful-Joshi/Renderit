@@ -349,12 +349,12 @@ int main() {
 
     // ── Textures — one per visible face ──────────────────────────────────────
     std::array<GLuint, 6> textures = {
-        loadTexture("../sandbox/textures/face_front.png"),
-        loadTexture("../sandbox/textures/face_back.png"),
-        loadTexture("../sandbox/textures/face_left.png"),
-        loadTexture("../sandbox/textures/face_right.png"),
-        loadTexture("../sandbox/textures/face_top.png"),
-        loadTexture("../sandbox/textures/face_bottom.png"),  // bottom not visible
+        loadTexture("../sandbox/textures/face_front.webp"),
+        loadTexture("../sandbox/textures/face_back.webp"),
+        loadTexture("../sandbox/textures/face_left.webp"),
+        loadTexture("../sandbox/textures/face_right.webp"),
+        loadTexture("../sandbox/textures/face_top.webp"),
+        loadTexture("../sandbox/textures/face_bottom.webp"),  // bottom not visible
     };
 
     // ── Camera ────────────────────────────────────────────────────────────────

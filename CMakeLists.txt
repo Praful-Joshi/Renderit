@@ -24,16 +24,18 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     external/stb
 )
 
-target_link_libraries(${PROJECT_NAME}
-    glad
-    glfw
-    glm::glm
-    assimp::assimp
-    OpenGL::GL
-    "-framework Cocoa"
-    "-framework IOKit"
-    "-framework CoreVideo"
-)
+if(APPLE)
+    target_link_libraries(${PROJECT_NAME}
+        glad glfw glm::glm assimp::assimp OpenGL::GL
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+    )
+else()
+    target_link_libraries(${PROJECT_NAME}
+        glad glfw glm::glm assimp::assimp OpenGL::GL
+    )
+endif()
 
 # ── Sandbox ───────────────────────────────────────────────────────────────────
 # Standalone single-file target for quick prototyping and demos.
@@ -46,19 +48,20 @@ target_link_libraries(${PROJECT_NAME}
 # just create sandbox/sandbox.cpp and re-run cmake to activate it.
 if(EXISTS "${CMAKE_SOURCE_DIR}/sandbox/sandbox.cpp")
     add_executable(Sandbox sandbox/sandbox.cpp)
-
     target_include_directories(Sandbox PRIVATE
         external/glad/include
         external/stb
     )
-
-    target_link_libraries(Sandbox
-        glad
-        glfw
-        glm::glm
-        OpenGL::GL
-        "-framework Cocoa"
-        "-framework IOKit"
-        "-framework CoreVideo"
-    )
+    if(APPLE)
+        target_link_libraries(Sandbox
+            glad glfw glm::glm OpenGL::GL
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreVideo"
+        )
+    else()
+        target_link_libraries(Sandbox
+            glad glfw glm::glm OpenGL::GL
+        )
+    endif()
 endif()

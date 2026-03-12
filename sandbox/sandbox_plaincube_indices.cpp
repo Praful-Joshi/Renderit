@@ -5,6 +5,15 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#define VERT0 -0.5f, -0.5f,  0.5f
+#define VERT1  0.5f, -0.5f,  0.5f
+#define VERT2  0.5f,  0.5f,  0.5f
+#define VERT3 -0.5f,  0.5f,  0.5f
+#define VERT4 -0.5f, -0.5f, -0.5f
+#define VERT5  0.5f, -0.5f, -0.5f
+#define VERT6  0.5f,  0.5f, -0.5f
+#define VERT7 -0.5f,  0.5f, -0.5f
+
 static const char* VERTEX_SHADER_PROGRAM = R"glsl(
 #version 330 core
 
@@ -36,41 +45,23 @@ void main() {
 
 // This is how we define 3D objects in CG. In this case it's a cube.
 GLfloat CUBE_VERTS[] = {
-    -0.5f,-0.5f, 0.5f,  //0
-     0.5f,-0.5f, 0.5f,  //1
-     0.5f, 0.5f, 0.5f,  //2
-    -0.5f, 0.5f, 0.5f,  //3
-     0.5f,-0.5f,-0.5f,  //4
-    -0.5f,-0.5f,-0.5f,  //5
-    -0.5f, 0.5f,-0.5f,  //6
-     0.5f, 0.5f,-0.5f,  //7
+VERT0,  //0
+VERT1,  //1
+VERT2,  //2
+VERT3,  //3
+VERT4,  //4
+VERT5,  //5
+VERT6,  //6
+VERT7,  //7
 };
 
 GLuint CUBE_INDICES[] = {
-
-    // front
-    0,1,2,
-    2,3,0,
-
-    // back
-    5,6,7,
-    7,4,5,
-
-    // left
-    5,0,3,
-    3,6,5,
-
-    // right
-    1,4,7,
-    7,2,1,
-
-    // top
-    6,3,2,
-    2,7,6,
-
-    // bottom
-    5,4,1,
-    1,0,5
+0,1,2, 2,3,0,          //front face
+4,5,6, 6,7,4,          //back face
+4,0,3, 3,7,4,          //left face
+5,1,2, 2,6,5,          //right face
+3,2,6, 6,7,3,          //top face
+0,1,5, 5,4,0           //bottom face
 };
 
 // This function updates the renderable area also known as 

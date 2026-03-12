@@ -21,6 +21,8 @@
 #define VERT6  0.5f,  0.5f, -0.5f
 #define VERT7 -0.5f,  0.5f, -0.5f
 
+const int WINDOW_WIDTH = 900, WINDOW_HEIGHT = 700;
+
 static const char* VERTEX_SHADER_PROGRAM = R"glsl(
 #version 330 core
 
@@ -135,12 +137,10 @@ static GLuint buildProgram(const char* vert, const char* frag) {
 
 int main()
 {
-    // --- Creating a window ---
+// --- GLFW & GLAD Init, Create a window ---
 
     // Init GLFW - our windowing library
     glfwInit();
-
-    // Some GLFW Settings
 
     // Tell GLFW that you are using opengl version 3.3
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -151,10 +151,8 @@ int main()
     // to be forward compatible
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Some GLFW Settings
-
     // Create the actual window
-    GLFWwindow* window = glfwCreateWindow(900, 700, "OpenGLTest", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "OpenGLTest", nullptr, nullptr);
 
     // Set the window's context to current opengl context.
     glfwMakeContextCurrent(window);
@@ -170,20 +168,22 @@ int main()
     // Load opengl function definitions using GLAD
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
+    // Some logs to test if opengl function definitions loaded correctly.
+    std::cout << "OpenGL " << glGetString(GL_VERSION)
+              << " | " << glGetString(GL_RENDERER) << "\n";
+
     // Enable depth testing in OpenGL, allowing the renderer to use a 
     // depth buffer (z-buffer) to determine which fragments are in front of others.
     // Also our first opengl function call!!!
     glEnable(GL_DEPTH_TEST);
 
-    // Some logs to test if opengl function definitions loaded correctly.
-    std::cout << "OpenGL " << glGetString(GL_VERSION)
-              << " | " << glGetString(GL_RENDERER) << "\n";
+// --- GLFW & GLAD Init, Create a window ---
 
-    // --- Transferring model data from CPU to GPU ---
+// --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
+
     // Currently our model's data lives in the CPU RAM in an array (CUBE_VERTS)
     // We need to transfer it to the GPU VRAM. For this we need to tell opengl
     // to create an array on the GPU to store our data and return the ID of that array
-
     // Create an usigned int to store GPU array's ID
     GLuint GPUVertsArrayID;
 
@@ -256,13 +256,36 @@ int main()
     // Data transfer complete, stop our recorder
     glBindVertexArray(0);
 
-    // ── Camera ────────────────────────────────────────────────────────────────
-    glm::vec3 cameraPos  = glm::vec3(-4.0f, -2.5f, 3.0f);
-    glm::mat4 view       = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0,1,0));
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f),
-                                            (float)900/700, 0.1f, 100.0f);
+// --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
+
+// --- Creating MVP matrices ---
+
+    // Model Matrix. We are gonna put the cube at the origin of the world space so we can use
+    // an identity matrix as a model matrix.
+    glm::mat4 model = glm::mat4(1.0f);
+
+    // View Matrix. To create a view matrix, we need to specify the location of our camera in the
+    // world space, the point where our camera will look at and the 'up' direction to specify the 
+    // rotation of the camera.
+    glm::vec3 cameraPos         = glm::vec3(-4.0f, -2.5f, 3.0f);
+    glm::vec3 cameraLookAtPos   = glm::vec3(0.0f);
+    glm::vec3 cameraUpDirection = glm::vec3(0, 1, 0);
+    glm::mat4 view              = glm::lookAt(cameraPos, cameraLookAtPos, cameraUpDirection);
+
+
+    // Projection matrix. To take a picture from the camera or to project the view on our screen,
+    // we need to define the field of view of our camera, the aspect ratio we want the picture in and
+    // the near and far distances our camera can capture.
+    float fieldOfView = glm::radians(45.0f);
+    float aspectRatio = (float)WINDOW_WIDTH/WINDOW_HEIGHT; // We are using the same aspect ratio as our window
+    float cameraNearDistance = 0.1f;
+    float cameraFarDistance = 100.0f;
+    glm::mat4 projection = glm::perspective(fieldOfView, aspectRatio, cameraNearDistance, cameraFarDistance);
+
+// --- Creating MVP matrices ---
     
-    // Compile both the vertex and shader code and return the ID of the compiled program                                        
+// --- Compiling shaders and fetching uniform locations ---    
+
     GLuint shaderProgram   = buildProgram(VERTEX_SHADER_PROGRAM,   FRAGMENT_SHADER_PROGRAM);
 
     // Get access to constants defined in the vertex shader so we can pass data to it
@@ -270,13 +293,18 @@ int main()
     GLint shaderViewMatrix   = glGetUniformLocation(shaderProgram, "u_view");
     GLint shaderProjectionMatrix   = glGetUniformLocation(shaderProgram, "u_projection");
 
-    // run this loop till the GLFW window is closed
+// --- Compiling shaders and fetching uniform locations ---  
+
+// --- Render loop ---
     while (!glfwWindowShouldClose(window))
     {
         // Close the window if esc key is pressed 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
         
+
+// --- Some window settings ---
+
         // Tell opengl which bg color to use for the renderable area
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
@@ -284,23 +312,27 @@ int main()
         // Also tell opengl to clear the z-buffer data
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Tell opengl to use shaderProgram for following instructions
+// --- Some window settings ---
+
+// --- Draw call ---
+
+        // Tell opengl to use our compiled shader program for the next draw call
         glUseProgram(shaderProgram);
 
-        // Send data to vertex constants
-        glUniformMatrix4fv(shaderModelMatrix, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+        // Pass MVC to vertex shader
+        glUniformMatrix4fv(shaderModelMatrix, 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(shaderViewMatrix,  1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(shaderProjectionMatrix,  1, GL_FALSE, glm::value_ptr(projection));
 
         // Tell opengl to watch the recording that we did previously and draw accordingly
         glBindVertexArray(GPURecorderID);
 
-        // Draw 36 recorder vertices as triangles.
+        // This draw call goes through each index in the index array, uses that index to get a vertex from the 
+        // verts array. When it gets 3 vertices, it draws a triangle.
         // p1 - type of primitive to draw, in this case triangles
-        // p2 - index of where our data starts, in our case 0th index as we have only 1 object
-        // p3 - number of vertices to draw
-        // glDrawArrays(GL_TRIANGLES, 0, 36);
-
+        // p2 - total number of indices
+        // p3 - data type of each index
+        // p4 - offset 
         // Draw using element array
         glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
 
@@ -314,7 +346,14 @@ int main()
         // Tell opengl to listen for input
         glfwPollEvents();
     }
+
+// --- Render loop ---
+
+// --- Program Termination ---
+
     // Close the glfw window
     glfwTerminate();
     return 0;
+
+// --- Program Termination ---
 }

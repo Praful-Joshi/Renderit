@@ -107,7 +107,7 @@ static GLuint compileShader(GLenum type, const char* src) {
     return s;
 }
 
-static GLuint buildProgram(const char* vert, const char* frag) {
+static GLuint buildShaderProgram(const char* vert, const char* frag) {
     GLuint v = compileShader(GL_VERTEX_SHADER,   vert);
     GLuint f = compileShader(GL_FRAGMENT_SHADER, frag);
     GLuint p = glCreateProgram();
@@ -230,7 +230,7 @@ int main()
                                             (float)900/700, 0.1f, 100.0f);
     
     // Compile both the vertex and shader code and return the ID of the compiled program                                        
-    GLuint shaderProgram   = buildProgram(VERTEX_SHADER_PROGRAM,   FRAGMENT_SHADER_PROGRAM);
+    GLuint shaderProgram   = buildShaderProgram(VERTEX_SHADER_PROGRAM,   FRAGMENT_SHADER_PROGRAM);
 
     // Get access to constants defined in the vertex shader so we can pass data to it
     GLint shaderModelMatrix  = glGetUniformLocation(shaderProgram, "u_model");

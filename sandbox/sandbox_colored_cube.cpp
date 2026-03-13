@@ -4,104 +4,73 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
-#define COLOR_RED 1.0f,0.0f,0.0f
-#define COLOR_GREEN 0.0f,1.0f,0.0f
-#define COLOR_BLUE 0.0f,0.0f,1.0f
-#define COLOR_YELLOW 1.0f,1.0f,0.0f
-#define COLOR_VIOLET 1.0f,0.0f,1.0f
-#define COLOR_SKYBLUE 0.0f,1.0f,1.0f
+#define COLOR_RED       1.0f,0.0f,0.0f
+#define COLOR_GREEN     0.0f,1.0f,0.0f
+#define COLOR_BLUE      0.0f,0.0f,1.0f
+#define COLOR_YELLOW    1.0f,1.0f,0.0f
+#define COLOR_ORANGE    0.9f,0.3f,0.1f
+#define COLOR_WHITE     0.9f,0.9f,0.9f
 
-#define VERT0 -0.5f, -0.5f,  0.5f
-#define VERT1  0.5f, -0.5f,  0.5f
-#define VERT2  0.5f,  0.5f,  0.5f
-#define VERT3 -0.5f,  0.5f,  0.5f
-#define VERT4 -0.5f, -0.5f, -0.5f
-#define VERT5  0.5f, -0.5f, -0.5f
-#define VERT6  0.5f,  0.5f, -0.5f
-#define VERT7 -0.5f,  0.5f, -0.5f
+#define VERT0          -0.5f, -0.5f,  0.5f
+#define VERT1           0.5f, -0.5f,  0.5f
+#define VERT2           0.5f,  0.5f,  0.5f
+#define VERT3          -0.5f,  0.5f,  0.5f
+#define VERT4          -0.5f, -0.5f, -0.5f
+#define VERT5           0.5f, -0.5f, -0.5f
+#define VERT6           0.5f,  0.5f, -0.5f
+#define VERT7          -0.5f,  0.5f, -0.5f
 
 const int WINDOW_WIDTH = 900, WINDOW_HEIGHT = 700;
 
-static const char* VERTEX_SHADER_PROGRAM = R"glsl(
-#version 330 core
-
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_color;
-
-uniform mat4 u_model;
-uniform mat4 u_view;
-uniform mat4 u_projection;
-
-out vec3 v_fragPos;
-out vec3 v_fragColor;
-
-void main() {
-    vec4 worldPos = u_model * vec4(a_position, 1.0);
-    gl_Position   = u_projection * u_view * worldPos;
-    v_fragPos = worldPos.xyz;
-    v_fragColor = a_color;
-}
-)glsl";
-
-static const char* FRAGMENT_SHADER_PROGRAM = R"glsl(
-#version 330 core
-
-in vec3 v_fragPos;
-in vec3 v_fragColor;
-out vec4 FragColor;
-
-void main() {
-    FragColor = vec4(v_fragColor, 1.0);
-}
-)glsl";
-
 // This is how we define 3D objects in CG. In this case it's a cube.
 GLfloat CUBE_VERTS[] = {
-// FRONT (red)
-VERT0, COLOR_RED,      //0
-VERT1, COLOR_RED,      //1
-VERT2, COLOR_RED,      //2
-VERT3, COLOR_RED,      //3
+    // FRONT (red)
+    VERT0, COLOR_RED,      //0
+    VERT1, COLOR_RED,      //1
+    VERT2, COLOR_RED,      //2
+    VERT3, COLOR_RED,      //3
 
-// BACK (cyan)
-VERT4, COLOR_SKYBLUE,  //4
-VERT5, COLOR_SKYBLUE,  //5
-VERT6, COLOR_SKYBLUE,  //6
-VERT7, COLOR_SKYBLUE,  //7
+    // BACK (cyan)
+    VERT4, COLOR_WHITE,    //4
+    VERT5, COLOR_WHITE,    //5
+    VERT6, COLOR_WHITE,    //6
+    VERT7, COLOR_WHITE,    //7
 
-// LEFT (yellow)
-VERT4, COLOR_YELLOW,   //8
-VERT0, COLOR_YELLOW,   //9
-VERT3, COLOR_YELLOW,   //10
-VERT7, COLOR_YELLOW,   //11 
+    // LEFT (yellow)
+    VERT4, COLOR_YELLOW,   //8
+    VERT0, COLOR_YELLOW,   //9
+    VERT3, COLOR_YELLOW,   //10
+    VERT7, COLOR_YELLOW,   //11 
 
-// RIGHT (green)
-VERT5, COLOR_GREEN,    //12
-VERT1, COLOR_GREEN,    //13
-VERT2, COLOR_GREEN,    //14
-VERT6, COLOR_GREEN,    //15
+    // RIGHT (green)
+    VERT5, COLOR_GREEN,    //12
+    VERT1, COLOR_GREEN,    //13
+    VERT2, COLOR_GREEN,    //14
+    VERT6, COLOR_GREEN,    //15
 
-// TOP (blue)
-VERT3, COLOR_BLUE,     //16
-VERT2, COLOR_BLUE,     //17
-VERT6, COLOR_BLUE,     //18
-VERT7, COLOR_BLUE,     //19
+    // TOP (blue)
+    VERT3, COLOR_BLUE,     //16
+    VERT2, COLOR_BLUE,     //17
+    VERT6, COLOR_BLUE,     //18
+    VERT7, COLOR_BLUE,     //19
 
-// BOTTOM (violet)
-VERT0, COLOR_VIOLET,   //20
-VERT1, COLOR_VIOLET,   //21
-VERT5, COLOR_VIOLET,   //22
-VERT4, COLOR_VIOLET,   //23
+    // BOTTOM (violet)
+    VERT0, COLOR_ORANGE,   //20
+    VERT1, COLOR_ORANGE,   //21
+    VERT5, COLOR_ORANGE,   //22
+    VERT4, COLOR_ORANGE,   //23
 };
 
 GLuint CUBE_INDICES[] = {
-0,1,2, 2,3,0,          //front face
-4,5,6, 6,7,4,          //back face
-8,9,10, 10,11,8,       //left face
-12,13,14, 14,15,12,    //right face
-16,17,18, 18,19,16,    //top face
-20,21,22, 22,23,20     //bottom face
+    0,1,2, 2,3,0,           //front face
+    4,5,6, 6,7,4,           //back face
+    8,9,10, 10,11,8,        //left face
+    12,13,14, 14,15,12,     //right face
+    16,17,18, 18,19,16,     //top face
+    20,21,22, 22,23,20      //bottom face
 };
 
 // This function updates the renderable area also known as 
@@ -120,7 +89,7 @@ static GLuint compileShader(GLenum type, const char* src) {
     return s;
 }
 
-static GLuint buildProgram(const char* vert, const char* frag) {
+static GLuint buildShaderProgram(const char* vert, const char* frag) {
     GLuint v = compileShader(GL_VERTEX_SHADER,   vert);
     GLuint f = compileShader(GL_FRAGMENT_SHADER, frag);
     GLuint p = glCreateProgram();
@@ -137,7 +106,7 @@ static GLuint buildProgram(const char* vert, const char* frag) {
 
 int main()
 {
-// --- GLFW & GLAD Init, Create a window ---
+//NOTE --- GLFW & GLAD Init, Create a window ---
 
     // Init GLFW - our windowing library
     glfwInit();
@@ -177,9 +146,10 @@ int main()
     // Also our first opengl function call!!!
     glEnable(GL_DEPTH_TEST);
 
-// --- GLFW & GLAD Init, Create a window ---
+//NOTE --- GLFW & GLAD Init, Create a window ---
 
-// --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
+
+//NOTE --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
 
     // Currently our model's data lives in the CPU RAM in an array (CUBE_VERTS)
     // We need to transfer it to the GPU VRAM. For this we need to tell opengl
@@ -256,9 +226,10 @@ int main()
     // Data transfer complete, stop our recorder
     glBindVertexArray(0);
 
-// --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
+//NOTE --- Transferring model data from CPU to GPU, describing layout of the vertex data ---
 
-// --- Creating MVP matrices ---
+
+//NOTE --- Creating MVP matrices ---
 
     // Model Matrix. We are gonna put the cube at the origin of the world space so we can use
     // an identity matrix as a model matrix.
@@ -267,7 +238,7 @@ int main()
     // View Matrix. To create a view matrix, we need to specify the location of our camera in the
     // world space, the point where our camera will look at and the 'up' direction to specify the 
     // rotation of the camera.
-    glm::vec3 cameraPos         = glm::vec3(-4.0f, -2.5f, 3.0f);
+    glm::vec3 cameraPos         = glm::vec3(4.0f, 2.5f, -3.0f);
     glm::vec3 cameraLookAtPos   = glm::vec3(0.0f);
     glm::vec3 cameraUpDirection = glm::vec3(0, 1, 0);
     glm::mat4 view              = glm::lookAt(cameraPos, cameraLookAtPos, cameraUpDirection);
@@ -276,34 +247,36 @@ int main()
     // Projection matrix. To take a picture from the camera or to project the view on our screen,
     // we need to define the field of view of our camera, the aspect ratio we want the picture in and
     // the near and far distances our camera can capture.
-    float fieldOfView = glm::radians(45.0f);
-    float aspectRatio = (float)WINDOW_WIDTH/WINDOW_HEIGHT; // We are using the same aspect ratio as our window
-    float cameraNearDistance = 0.1f;
-    float cameraFarDistance = 100.0f;
-    glm::mat4 projection = glm::perspective(fieldOfView, aspectRatio, cameraNearDistance, cameraFarDistance);
+    float fieldOfView           = glm::radians(45.0f);
+    float aspectRatio           = (float)WINDOW_WIDTH/WINDOW_HEIGHT; // We are using the same aspect ratio as our window
+    float cameraNearDistance    = 0.1f;
+    float cameraFarDistance     = 100.0f;
+    glm::mat4 projection        = glm::perspective(fieldOfView, aspectRatio, cameraNearDistance, cameraFarDistance);
 
-// --- Creating MVP matrices ---
+//NOTE --- Creating MVP matrices ---
+
     
-// --- Compiling shaders and fetching uniform locations ---    
+//NOTE --- Compiling shaders and fetching uniform locations ---    
 
-    GLuint shaderProgram   = buildProgram(VERTEX_SHADER_PROGRAM,   FRAGMENT_SHADER_PROGRAM);
+    GLuint shaderProgram   = buildShaderProgram(VERTEX_SHADER_PROGRAM,   FRAGMENT_SHADER_PROGRAM);
 
     // Get access to constants defined in the vertex shader so we can pass data to it
     GLint shaderModelMatrix  = glGetUniformLocation(shaderProgram, "u_model");
     GLint shaderViewMatrix   = glGetUniformLocation(shaderProgram, "u_view");
     GLint shaderProjectionMatrix   = glGetUniformLocation(shaderProgram, "u_projection");
 
-// --- Compiling shaders and fetching uniform locations ---  
+//NOTE --- Compiling shaders and fetching uniform locations ---  
 
-// --- Render loop ---
+
+//NOTE --- Render loop ---
+
     while (!glfwWindowShouldClose(window))
     {
         // Close the window if esc key is pressed 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
         
-
-// --- Some window settings ---
+    //NOTE --- Some window settings ---
 
         // Tell opengl which bg color to use for the renderable area
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -312,9 +285,10 @@ int main()
         // Also tell opengl to clear the z-buffer data
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-// --- Some window settings ---
+    //NOTE --- Some window settings ---
 
-// --- Draw call ---
+
+    //NOTE --- Draw call ---
 
         // Tell opengl to use our compiled shader program for the next draw call
         glUseProgram(shaderProgram);
@@ -340,6 +314,8 @@ int main()
         glBindVertexArray(0);
         glUseProgram(0);
 
+    //NOTE --- Draw call ---
+
         // Clear the current buffer and bring the back buffer forward
         glfwSwapBuffers(window);
 
@@ -347,13 +323,48 @@ int main()
         glfwPollEvents();
     }
 
-// --- Render loop ---
+//NOTE --- Render loop ---
 
-// --- Program Termination ---
+
+//NOTE --- Program Termination ---
 
     // Close the glfw window
     glfwTerminate();
     return 0;
 
-// --- Program Termination ---
+//NOTE --- Program Termination ---
+
 }
+
+static const char* VERTEX_SHADER_PROGRAM = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_color;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+
+out vec3 v_fragPos;
+out vec3 v_fragColor;
+
+void main() {
+    vec4 worldPos = u_model * vec4(a_position, 1.0);
+    gl_Position   = u_projection * u_view * worldPos;
+    v_fragPos = worldPos.xyz;
+    v_fragColor = a_color;
+}
+)glsl";
+
+static const char* FRAGMENT_SHADER_PROGRAM = R"glsl(
+#version 330 core
+
+in vec3 v_fragPos;
+in vec3 v_fragColor;
+out vec4 FragColor;
+
+void main() {
+    FragColor = vec4(v_fragColor, 1.0);
+}
+)glsl";

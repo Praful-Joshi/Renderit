@@ -102,23 +102,17 @@ static GLuint sendTexDataToGPU(const std::string& path) {
     int w, h, ch;
     unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
 
-
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     if (data) {
         std::cout << "[Texture] " << path << " (" << w << "x" << h << ")\n";
-
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-
         glGenerateMipmap(GL_TEXTURE_2D);
         stbi_image_free(data);
     } else {
@@ -126,7 +120,6 @@ static GLuint sendTexDataToGPU(const std::string& path) {
         unsigned char magenta[] = {255, 0, 255, 255};
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, magenta);
     }
-
     glBindTexture(GL_TEXTURE_2D, 0);
     return tex;
 }
@@ -316,7 +309,7 @@ int main()
     // View Matrix. To create a view matrix, we need to specify the location of our camera in the
     // world space, the point where our camera will look at and the 'up' direction to specify the 
     // rotation of the camera.
-    glm::vec3 cameraPos         = glm::vec3(4.0f, 2.5f, 3.0f);
+    glm::vec3 cameraPos         = glm::vec3(-4.0f, 2.5f, 3.0f);
     glm::vec3 cameraLookAtPos   = glm::vec3(0.0f);
     glm::vec3 cameraUpDirection = glm::vec3(0, 1, 0);
     glm::mat4 view              = glm::lookAt(cameraPos, cameraLookAtPos, cameraUpDirection);

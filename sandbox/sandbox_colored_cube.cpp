@@ -104,6 +104,40 @@ static GLuint buildShaderProgram(const char* vert, const char* frag) {
     return p;
 }
 
+
+static const char* VERTEX_SHADER_PROGRAM = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_color;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+
+out vec3 v_fragPos;
+out vec3 v_fragColor;
+
+void main() {
+    vec4 worldPos = u_model * vec4(a_position, 1.0);
+    gl_Position   = u_projection * u_view * worldPos;
+    v_fragPos = worldPos.xyz;
+    v_fragColor = a_color;
+}
+)glsl";
+
+static const char* FRAGMENT_SHADER_PROGRAM = R"glsl(
+#version 330 core
+
+in vec3 v_fragPos;
+in vec3 v_fragColor;
+out vec4 FragColor;
+
+void main() {
+    FragColor = vec4(v_fragColor, 1.0);
+}
+)glsl";
+
 int main()
 {
 //NOTE --- GLFW & GLAD Init, Create a window ---
@@ -238,7 +272,7 @@ int main()
     // View Matrix. To create a view matrix, we need to specify the location of our camera in the
     // world space, the point where our camera will look at and the 'up' direction to specify the 
     // rotation of the camera.
-    glm::vec3 cameraPos         = glm::vec3(4.0f, 2.5f, -3.0f);
+    glm::vec3 cameraPos         = glm::vec3(4.0f, 2.5f, 3.0f);
     glm::vec3 cameraLookAtPos   = glm::vec3(0.0f);
     glm::vec3 cameraUpDirection = glm::vec3(0, 1, 0);
     glm::mat4 view              = glm::lookAt(cameraPos, cameraLookAtPos, cameraUpDirection);
@@ -335,36 +369,3 @@ int main()
 //NOTE --- Program Termination ---
 
 }
-
-static const char* VERTEX_SHADER_PROGRAM = R"glsl(
-#version 330 core
-
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_color;
-
-uniform mat4 u_model;
-uniform mat4 u_view;
-uniform mat4 u_projection;
-
-out vec3 v_fragPos;
-out vec3 v_fragColor;
-
-void main() {
-    vec4 worldPos = u_model * vec4(a_position, 1.0);
-    gl_Position   = u_projection * u_view * worldPos;
-    v_fragPos = worldPos.xyz;
-    v_fragColor = a_color;
-}
-)glsl";
-
-static const char* FRAGMENT_SHADER_PROGRAM = R"glsl(
-#version 330 core
-
-in vec3 v_fragPos;
-in vec3 v_fragColor;
-out vec4 FragColor;
-
-void main() {
-    FragColor = vec4(v_fragColor, 1.0);
-}
-)glsl";

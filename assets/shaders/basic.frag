@@ -47,11 +47,33 @@ void main() {
         ? texture(u_material.diffuseMap, v_texCoord).rgb
         : u_material.diffuseColor;
 
+    // ── Normal ────────────────────────────────────────────────────────────────
+    // Build the TBN matrix: transforms vectors from tangent space → world space.
+    // T, B, N form an orthonormal basis local to this fragment's surface.
+    // Renormalize after interpolation (triangle interpolation can de-normalize).
+    vec3 T = normalize(v_tangent);
+    vec3 B = normalize(v_bitangent);
+    vec3 Ngeom = normalize(v_normal);
+    mat3 TBN = mat3(T, B, Ngeom);
+
+    vec3 N;
+    if (u_material.hasNormal) {
+        // Sample normal map — texels are in [0,1], remap to [-1,1] tangent space.
+        // The normal map encodes surface normals as RGB: (0.5,0.5,1.0) = straight up.
+        vec3 nTangent = texture(u_material.normalMap, v_texCoord).rgb;
+        nTangent = normalize(nTangent * 2.0 - 1.0);
+
+        // Rotate tangent-space normal into world space using TBN.
+        // Now N is a per-pixel world-space normal that follows the bumpy surface detail.
+        N = normalize(TBN * nTangent);
+    } else {
+        // No normal map — fall back to the smooth interpolated geometry normal.
+        N = Ngeom;
+    }
+
     // ── Vectors ───────────────────────────────────────────────────────────────
     // All vectors must be unit length (normalized) for dot products to give
-    // correct cosine values. Interpolation across a triangle can un-normalize
-    // them slightly, so we renormalize here in the fragment shader.
-    vec3 N = normalize(v_normal);
+    // correct cosine values.
 
     // Direction FROM this fragment TO the light source.
     // Not the other way around — we want the angle between the surface

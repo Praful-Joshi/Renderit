@@ -30,7 +30,7 @@ protected:
         );
 
         // ── Load model ────────────────────────────────────────────────────────
-        m_model = Scene::AssimpLoader::load("../models/cottage/cottage_obj.obj");
+        m_model = Scene::AssimpLoader::load("../models/girl/girl OBJ.obj");
 
         // ── Light cube geometry ───────────────────────────────────────────────
         // A simple unit cube — 8 unique positions, 36 indices.
@@ -55,13 +55,13 @@ protected:
         m_lightCubeBuffer->uploadIndices(cubeIdx);
 
         // Model setup
-        m_model->setScale(0.1f);
+        m_model->setScale(2.5f);
 
         // ── Camera ────────────────────────────────────────────────────────────
-        m_cameraPos = glm::vec3(0.0f, 3.0f, 8.0f);
+        m_cameraPos = glm::vec3(0.0f, 5.0f, 8.0f);
         m_view = glm::lookAt(
             m_cameraPos,
-            glm::vec3(0.0f, 1.0f, 0.0f),
+            glm::vec3(0.0f, 2.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
 

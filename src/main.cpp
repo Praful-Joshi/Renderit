@@ -22,7 +22,7 @@ protected:
         // ── Shaders ───────────────────────────────────────────────────────────
         m_shader = std::make_unique<Renderer::Shader>(
             "../assets/shaders/basic.vert",
-            "../assets/shaders/basic.frag"
+            "../assets/shaders/pbr.frag"
         );
         m_unlitShader = std::make_unique<Renderer::Shader>(
             "../assets/shaders/unlit.vert",
@@ -30,7 +30,7 @@ protected:
         );
 
         // ── Load model ────────────────────────────────────────────────────────
-        m_model = Scene::AssimpLoader::load("../models/girl/girl OBJ.obj");
+        m_model = Scene::AssimpLoader::load("../models/flesh/flesh_blob.fbx");
 
         // ── Light cube geometry ───────────────────────────────────────────────
         // A simple unit cube — 8 unique positions, 36 indices.
@@ -56,6 +56,7 @@ protected:
 
         // Model setup
         m_model->setScale(2.5f);
+        m_model->setRotation(90.0, glm::vec3(.0, 1., .0));
 
         // ── Camera ────────────────────────────────────────────────────────────
         m_cameraPos = glm::vec3(0.0f, 5.0f, 8.0f);

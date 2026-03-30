@@ -19,11 +19,13 @@ Texture::Texture(const std::string& path) : m_path(path) {
     // This one call flips all images on load so UVs work correctly.
     stbi_set_flip_vertically_on_load(true);
 
-    // Decode the image into a CPU-side byte array.
-    // stbi_load returns: pointer to RGBA bytes, and fills width/height/channels.
-    // The final '4' requests 4 channels (RGBA) regardless of source format.
+    // Decode the image preserving its original channel count.
+    // Forcing 4 channels (RGBA) on everything corrupts single-channel maps
+    // (roughness, AO) and can shift the blue channel of normal maps.
+    // We pass 0 so stb_image returns exactly what's in the file, then
+    // pick the matching GL format below.
     unsigned char* data = stbi_load(path.c_str(),
-                                    &m_width, &m_height, &m_channels, 4);
+                                    &m_width, &m_height, &m_channels, 0);
     if (!data) {
         throw std::runtime_error("[Texture] Failed to load: " + path +
                                  "\n  Reason: " + stbi_failure_reason());
@@ -33,34 +35,48 @@ Texture::Texture(const std::string& path) : m_path(path) {
               << " (" << m_width << "x" << m_height
               << ", " << m_channels << " channels)\n";
 
+    // Choose GL format based on actual channel count.
+    // internalFormat = how the GPU stores it.
+    // dataFormat     = how the CPU-side bytes are laid out.
+    GLenum internalFormat, dataFormat;
+    switch (m_channels) {
+        case 1:  internalFormat = GL_R8;    dataFormat = GL_RED;  break;
+        case 2:  internalFormat = GL_RG8;   dataFormat = GL_RG;   break;
+        case 3:  internalFormat = GL_RGB8;  dataFormat = GL_RGB;  break;
+        case 4:  internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+        default: internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+    }
+
     // ── Generate GPU texture object ───────────────────────────────────────────
     glGenTextures(1, &m_textureID);
     glBindTexture(GL_TEXTURE_2D, m_textureID);
 
+    // For single-channel textures (roughness, AO, metallic) the default swizzle
+    // reads R into R only, leaving G/B as 0. We want to sample it as .r in GLSL
+    // which works fine — but set swizzle so all channels read from R, making
+    // texture().rgb work correctly too if ever needed.
+    if (m_channels == 1) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    }
+
     // ── Wrapping mode ─────────────────────────────────────────────────────────
-    // GL_REPEAT: UVs outside [0,1] tile the texture.
-    // Good default for surfaces with repeating detail (bricks, wood grain).
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);  // U axis
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);  // V axis
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     // ── Filtering mode ────────────────────────────────────────────────────────
-    // When the texture is minified (far away): use mipmaps + linear blend
-    // between two adjacent mip levels (trilinear filtering).
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    // When the texture is magnified (close up): bilinear interpolation.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // ── Upload pixel data to GPU ──────────────────────────────────────────────
-    // Args: target, mip level, internal format, width, height,
-    //       border (always 0), source format, data type, pixel data pointer
-    glTexImage2D(GL_TEXTURE_2D,     // target
-                 0,                 // mip level 0 = full resolution
-                 GL_RGBA,           // internal format on GPU
-                 m_width, m_height, // dimensions
-                 0,                 // border — must be 0
-                 GL_RGBA,           // format of the CPU-side data
-                 GL_UNSIGNED_BYTE,  // each channel is one byte (0-255)
-                 data);             // the actual pixel bytes
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 internalFormat,
+                 m_width, m_height,
+                 0,
+                 dataFormat,
+                 GL_UNSIGNED_BYTE,
+                 data);
 
     // ── Generate mipmap chain ─────────────────────────────────────────────────
     // Automatically creates 512x512, 256x256, 128x128... down to 1x1.

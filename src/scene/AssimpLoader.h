@@ -42,6 +42,16 @@ private:
         const std::string& modelDir,
         std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
     );
+
+    // Fallback: scan the model directory for a file whose lowercase name
+    // contains any of the given keywords (e.g. {"rough","roughness"}).
+    // FBX exporters often embed texture paths in non-standard Assimp slots,
+    // so typed lookups fail even when the file is sitting right next to the model.
+    static std::shared_ptr<Renderer::Texture> findTextureByKeyword(
+        const std::string& modelDir,
+        const std::vector<std::string>& keywords,
+        std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
+    );
 };
 
 } // namespace Scene

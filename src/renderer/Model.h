@@ -30,6 +30,11 @@ public:
     void setScale   (const glm::vec3& scale);
     void setScale   (float uniformScale);
 
+    // Fix-up rotation applied before the spin — use this to correct a model's
+    // rest orientation (e.g. an FBX exported on its side from Blender).
+    // setRotation() / the per-frame spin are applied on top of this.
+    void setBaseRotation(float angleDegrees, const glm::vec3& axis);
+
     const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 
     size_t meshCount() const { return m_meshes.size(); }
@@ -43,6 +48,7 @@ private:
     glm::vec3 m_scale       { 1.0f };
     float     m_angleDeg    { 0.0f };
     glm::vec3 m_rotationAxis{ 0.0f, 1.0f, 0.0f };
+    glm::mat4 m_baseRotation{ 1.0f };  // orientation fix, identity by default
 
     glm::mat4 m_modelMatrix { 1.0f };
 };

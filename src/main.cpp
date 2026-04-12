@@ -30,7 +30,7 @@ protected:
         );
 
         // ── Load model ────────────────────────────────────────────────────────
-        m_model = Scene::AssimpLoader::load("../models/girl/girl OBJ.obj");
+        m_model = Scene::AssimpLoader::load("../models/flesh/flesh_blob.fbx");
 
         // ── Light cube geometry ───────────────────────────────────────────────
         // A simple unit cube — 8 unique positions, 36 indices.
@@ -55,7 +55,8 @@ protected:
         m_lightCubeBuffer->uploadIndices(cubeIdx);
 
         // Model setup
-        m_model->setScale(2.5f);
+        m_model->setScale(3.5f);
+        m_model->setBaseRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));  // tip upright
 
         // ── Camera ────────────────────────────────────────────────────────────
         m_cameraPos = glm::vec3(0.0f, 5.0f, 8.0f);
@@ -80,13 +81,13 @@ protected:
 
         // Orbit the light around the scene so you can see the lighting change
         // as it moves — makes diffuse and specular effects very obvious.
-        m_lightAngle += 60.0f * deltaTime;  // 60 degrees per second
-        float rad = glm::radians(m_lightAngle);
-        m_lightPos = glm::vec3(
-            std::cos(rad) * m_lightOrbitRadius,
-            m_lightHeight,
-            std::sin(rad) * m_lightOrbitRadius
-        );
+        // m_lightAngle += 60.0f * deltaTime;  // 60 degrees per second
+        // float rad = glm::radians(m_lightAngle);
+        // m_lightPos = glm::vec3(
+        //     std::cos(rad) * m_lightOrbitRadius,
+        //     m_lightHeight,
+        //     std::sin(rad) * m_lightOrbitRadius
+        // );
     }
 
     void onRender() override {
@@ -153,7 +154,7 @@ private:
 
     // Light — orbits around the scene so lighting effects are clearly visible
     glm::vec3 m_lightPos         = glm::vec3(3.0f, 3.0f, 3.0f);
-    glm::vec3 m_lightColor       = glm::vec3(1.0f, 0.95f, 0.8f); // warm white
+    glm::vec3 m_lightColor       = glm::vec3(4.0f, 3.8f, 3.2f);
     float     m_lightAngle       = 0.0f;
     float     m_lightOrbitRadius = 4.0f;
     float     m_lightHeight      = 3.5f;

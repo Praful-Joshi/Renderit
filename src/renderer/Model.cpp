@@ -35,12 +35,20 @@ void Model::setScale(float uniformScale) {
     rebuildModelMatrix();
 }
 
+void Model::setBaseRotation(float angleDegrees, const glm::vec3& axis) {
+    m_baseRotation = glm::rotate(glm::mat4(1.0f), glm::radians(angleDegrees), axis);
+    rebuildModelMatrix();
+}
+
 void Model::rebuildModelMatrix() {
-    // Order: scale → rotate → translate (applied right-to-left by GPU)
+    // Order: scale → baseRotation → spin → translate
+    // baseRotation fixes the model's rest orientation (applied first, in model space).
+    // The per-frame spin is layered on top in world space.
     glm::mat4 m = glm::mat4(1.0f);
     m = glm::translate(m, m_position);
     if (m_angleDeg != 0.0f)
         m = glm::rotate(m, glm::radians(m_angleDeg), m_rotationAxis);
+    m = m * m_baseRotation;   // base orientation fix applied after spin
     m = glm::scale(m, m_scale);
     m_modelMatrix = m;
 }

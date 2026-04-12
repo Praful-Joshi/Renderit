@@ -5,8 +5,12 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 
+#include <filesystem>
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
+
+namespace fs = std::filesystem;
 
 namespace Scene {
 
@@ -181,18 +185,52 @@ AssimpLoader::processMaterial(
     aiMat->Get(AI_MATKEY_NAME, name);
     material->name = name.C_Str();
 
-    // ── Diffuse map ───────────────────────────────────────────────────────────
+    // ── Diffuse / albedo map ──────────────────────────────────────────────────
+    // Try Assimp's typed slot first; fall back to filename keyword scan.
+    // FBX exporters frequently don't fill typed slots even when the texture
+    // file is sitting right next to the model.
     material->diffuseMap = loadTexture(aiMat, aiTextureType_DIFFUSE,
                                        modelDir, textureCache);
+    if (!material->diffuseMap)
+        material->diffuseMap = findTextureByKeyword(modelDir,
+            {"albedo", "diffuse", "basecolor", "base_color", "color"}, textureCache);
 
     // ── Normal map ────────────────────────────────────────────────────────────
-    // Assimp uses aiTextureType_NORMALS for normal maps in most formats.
-    // Some exporters use aiTextureType_HEIGHT instead — we try both.
     material->normalMap = loadTexture(aiMat, aiTextureType_NORMALS,
                                       modelDir, textureCache);
     if (!material->normalMap)
         material->normalMap = loadTexture(aiMat, aiTextureType_HEIGHT,
                                           modelDir, textureCache);
+    if (!material->normalMap)
+        material->normalMap = findTextureByKeyword(modelDir,
+            {"normal", "nrm", "nrml", "nor"}, textureCache);
+
+    // ── Roughness map ─────────────────────────────────────────────────────────
+    material->roughnessMap = loadTexture(aiMat, aiTextureType_DIFFUSE_ROUGHNESS,
+                                         modelDir, textureCache);
+    if (!material->roughnessMap)
+        material->roughnessMap = loadTexture(aiMat, aiTextureType_SHININESS,
+                                             modelDir, textureCache);
+    if (!material->roughnessMap)
+        material->roughnessMap = findTextureByKeyword(modelDir,
+            {"roughness", "rough", "rgh"}, textureCache);
+
+    // ── Metallic map ──────────────────────────────────────────────────────────
+    material->metallicMap = loadTexture(aiMat, aiTextureType_METALNESS,
+                                        modelDir, textureCache);
+    if (!material->metallicMap)
+        material->metallicMap = findTextureByKeyword(modelDir,
+            {"metallic", "metalness", "metal"}, textureCache);
+
+    // ── AO map ────────────────────────────────────────────────────────────────
+    material->aoMap = loadTexture(aiMat, aiTextureType_AMBIENT_OCCLUSION,
+                                  modelDir, textureCache);
+    if (!material->aoMap)
+        material->aoMap = loadTexture(aiMat, aiTextureType_LIGHTMAP,
+                                      modelDir, textureCache);
+    if (!material->aoMap)
+        material->aoMap = findTextureByKeyword(modelDir,
+            {"ao", "ambientocclusion", "ambient_occlusion", "occlusion"}, textureCache);
 
     // ── Scalar properties ─────────────────────────────────────────────────────
     aiColor3D color;
@@ -227,22 +265,130 @@ AssimpLoader::loadTexture(
     aiString texPath;
     material->GetTexture(type, 0, &texPath); // index 0 = first texture of this type
 
-    std::string fullPath = modelDir + "/" + texPath.C_Str();
+    // ── Sanitize path ─────────────────────────────────────────────────────────
+    // MTL files exported from Windows often embed a subdirectory prefix using
+    // backslashes (e.g. "tEXTURE\BOdy Skin Base Color.png"). On macOS/Linux
+    // the backslash is not a directory separator so the full string is treated
+    // as a literal filename — which of course doesn't exist.
+    //
+    // Fix: convert all backslashes to forward slashes, then strip everything
+    // up to (and including) the last slash, keeping only the bare filename.
+    // Then resolve that filename relative to the directory the model lives in.
+    std::string rawPath = texPath.C_Str();
+    std::replace(rawPath.begin(), rawPath.end(), '\\', '/');
+    std::string filename = fs::path(rawPath).filename().string();
+    std::string fullPath = modelDir + "/" + filename;
 
     // Cache lookup — return existing texture if already loaded
     auto it = textureCache.find(fullPath);
     if (it != textureCache.end())
         return it->second;
 
-    // Load and cache
-    try {
-        auto tex = std::make_shared<Renderer::Texture>(fullPath);
-        textureCache[fullPath] = tex;
-        return tex;
-    } catch (const std::exception& e) {
-        std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
-        return nullptr;
+    // ── Exact load ────────────────────────────────────────────────────────────
+    if (fs::exists(fullPath)) {
+        try {
+            auto tex = std::make_shared<Renderer::Texture>(fullPath);
+            textureCache[fullPath] = tex;
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+            return nullptr;
+        }
     }
+
+    // ── Case-insensitive fallback ─────────────────────────────────────────────
+    // Some exporters mangle capitalisation (e.g. "FACE Base Color.png" in the
+    // MTL vs "FACE Base Color apha.png" on disk). Scan the model directory for
+    // any file whose name matches case-insensitively.
+    std::string lowerTarget = filename;
+    std::transform(lowerTarget.begin(), lowerTarget.end(),
+                   lowerTarget.begin(), ::tolower);
+
+    std::string bestMatch;
+    try {
+        for (const auto& entry : fs::directory_iterator(modelDir)) {
+            if (!entry.is_regular_file()) continue;
+            std::string candidate = entry.path().filename().string();
+            std::string lowerCandidate = candidate;
+            std::transform(lowerCandidate.begin(), lowerCandidate.end(),
+                           lowerCandidate.begin(), ::tolower);
+            if (lowerCandidate == lowerTarget) {
+                bestMatch = entry.path().string();
+                break;
+            }
+        }
+    } catch (...) {}
+
+    if (!bestMatch.empty()) {
+        std::cout << "[AssimpLoader] Note: resolved '" << filename
+                  << "' → '" << fs::path(bestMatch).filename().string()
+                  << "' (case-insensitive match)\n";
+        try {
+            auto tex = std::make_shared<Renderer::Texture>(bestMatch);
+            textureCache[fullPath] = tex;  // cache under the original key
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+            return nullptr;
+        }
+    }
+
+    std::cerr << "[AssimpLoader] Warning: texture not found: " << fullPath << "\n";
+    return nullptr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  findTextureByKeyword — keyword-based directory scan fallback
+// ─────────────────────────────────────────────────────────────────────────────
+// FBX exporters frequently store textures in non-standard Assimp slots, or
+// don't store them at all — the artist just named the files "Blob_roughness.jpg"
+// and expected the engine to find them. This function scans the model directory
+// for a file whose lowercase name contains any of the given keywords.
+//
+// Keywords are tried in order; first match wins. Example call:
+//   findTextureByKeyword(dir, {"roughness", "rough"}, cache)
+//
+std::shared_ptr<Renderer::Texture>
+AssimpLoader::findTextureByKeyword(
+    const std::string& modelDir,
+    const std::vector<std::string>& keywords,
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache)
+{
+    // Collect all files in the directory once, lowercase their names.
+    std::vector<std::pair<std::string, std::string>> entries; // (fullPath, lowerName)
+    try {
+        for (const auto& entry : fs::directory_iterator(modelDir)) {
+            if (!entry.is_regular_file()) continue;
+            std::string name = entry.path().filename().string();
+            std::string lower = name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            entries.emplace_back(entry.path().string(), lower);
+        }
+    } catch (...) { return nullptr; }
+
+    // Try each keyword in priority order.
+    for (const auto& kw : keywords) {
+        for (const auto& [fullPath, lowerName] : entries) {
+            if (lowerName.find(kw) != std::string::npos) {
+                // Cache check
+                auto it = textureCache.find(fullPath);
+                if (it != textureCache.end()) return it->second;
+
+                try {
+                    std::cout << "[AssimpLoader] Keyword match: '"
+                              << fs::path(fullPath).filename().string()
+                              << "' (keyword: '" << kw << "')\n";
+                    auto tex = std::make_shared<Renderer::Texture>(fullPath);
+                    textureCache[fullPath] = tex;
+                    return tex;
+                } catch (const std::exception& e) {
+                    std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+                    return nullptr;
+                }
+            }
+        }
+    }
+    return nullptr;
 }
 
 } // namespace Scene

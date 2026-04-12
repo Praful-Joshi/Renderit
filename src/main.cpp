@@ -22,7 +22,7 @@ protected:
         // ── Shaders ───────────────────────────────────────────────────────────
         m_shader = std::make_unique<Renderer::Shader>(
             "../assets/shaders/basic.vert",
-            "../assets/shaders/pbr.frag"
+            "../assets/shaders/basic.frag"
         );
         m_unlitShader = std::make_unique<Renderer::Shader>(
             "../assets/shaders/unlit.vert",

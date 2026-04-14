@@ -1,0 +1,4296 @@
+## File Structure
+```
+renderit/
+├── assets
+│   └── shaders
+│       ├── basic.frag
+│       ├── basic.vert
+│       ├── shadow.frag
+│       ├── shadow.vert
+│       ├── unlit.frag
+│       └── unlit.vert
+├── src
+│   ├── core
+│   │   ├── Application.cpp
+│   │   ├── Application.h
+│   │   ├── Window.cpp
+│   │   └── Window.h
+│   ├── renderer
+│   │   ├── Buffer.cpp
+│   │   ├── Buffer.h
+│   │   ├── Material.cpp
+│   │   ├── Material.h
+│   │   ├── Mesh.cpp
+│   │   ├── Mesh.h
+│   │   ├── Model.cpp
+│   │   ├── Model.h
+│   │   ├── Shader.cpp
+│   │   ├── Shader.h
+│   │   ├── ShadowMap.cpp
+│   │   ├── ShadowMap.h
+│   │   ├── Texture.cpp
+│   │   └── Texture.h
+│   ├── scene
+│   │   ├── AssimpLoader.cpp
+│   │   └── AssimpLoader.h
+│   └── main.cpp
+├── .clang-format
+├── .gitignore
+├── CMakeLists.txt
+└── Readme.md
+```
+
+### `src/core/Application.cpp`
+
+```cpp
+#include "Application.h"
+#include <GLFW/glfw3.h>
+#include <glad/glad.h>
+#include <iostream>
+
+namespace Core
+{
+Application::Application()
+{
+    WindowConfig config;
+    config.width  = 800;
+    config.height = 600;
+    config.title  = "OpenGL Renderer";
+    config.vsync  = true;
+
+    m_window = std::make_unique<Window>(config);
+}
+
+void Application::run()
+{
+    onInit();
+    mainLoop();
+    onShutdown();
+}
+
+void Application::mainLoop()
+{
+    while (!m_window->shouldClose())
+    {
+        float deltaTime = calcDeltaTime();
+
+        m_window->pollEvents();
+        onUpdate(deltaTime);
+
+        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        onRender();
+
+        m_window->swapBuffers();
+    }
+}
+
+float Application::calcDeltaTime()
+{
+    float currentTime = static_cast<float>(glfwGetTime());
+    float delta       = currentTime - m_lastFrameTime;
+    m_lastFrameTime   = currentTime;
+    return delta;
+}
+
+bool Application::isKeyPressed(int glfwKey) const
+{
+    return glfwGetKey(m_window->getNativeWindow(), glfwKey) == GLFW_PRESS;
+}
+
+} // namespace Core
+```
+
+### `src/core/Application.h`
+
+```cpp
+#pragma once
+
+#include "Window.h"
+#include <memory>
+
+namespace Core
+{
+
+/**
+ * @class Application
+ * @brief Base class representing the main application lifecycle.
+ *
+ * @details
+ * Responsible for:
+ * - Creating and owning the Window
+ * - Managing the main render loop
+ * - Providing overridable hooks for initialization, update, render, and shutdown
+ *
+ * Lifecycle:
+ *   constructor → run()
+ *       → onInit()
+ *       → mainLoop()
+ *           → onUpdate()
+ *           → onRender()
+ *       → onShutdown()
+ *
+ * This class is non-copyable and non-movable.
+ * There must exist exactly one Application instance.
+ */
+class Application
+{
+  public:
+    /**
+     * @brief Constructs the Application and creates the main window.
+     *
+     * Initializes GLFW, GLAD, and creates the OpenGL context
+     * through the Window abstraction.
+     *
+     * @throws std::runtime_error if window or context creation fails.
+     */
+    Application();
+
+    virtual ~Application() = default;
+
+    Application(const Application&)            = delete;
+    Application& operator=(const Application&) = delete;
+    Application(Application&&)                 = delete;
+    Application& operator=(Application&&)      = delete;
+
+    /**
+     * @brief Starts the application lifecycle.
+     *
+     * Calls:
+     *  - onInit()
+     *  - main loop
+     *  - onShutdown()
+     */
+    void run();
+
+  protected:
+    /**
+     * @brief Called once before entering the main loop.
+     */
+    virtual void onInit()
+    {
+    }
+
+    /**
+     * @brief Called once per frame before rendering.
+     *
+     * @param deltaTime Time elapsed since previous frame in seconds.
+     */
+    virtual void onUpdate(float deltaTime)
+    {
+    }
+
+    /**
+     * @brief Called once per frame to perform rendering.
+     *
+     * OpenGL state should already be valid.
+     */
+    virtual void onRender()
+    {
+    }
+
+    /**
+     * @brief Called once after exiting the main loop.
+     */
+    virtual void onShutdown()
+    {
+    }
+
+    /**
+     * @brief Returns whether a key is currently pressed.
+     *
+     * @param glfwKey GLFW key enum (e.g., GLFW_KEY_ESCAPE)
+     * @return True if key is pressed.
+     */
+    bool isKeyPressed(int glfwKey) const;
+
+    /// Owning pointer to the main window.
+    std::unique_ptr<Window> m_window;
+
+  private:
+    /// Executes the main render loop.
+    void mainLoop();
+
+    /**
+     * @brief Calculates frame delta time.
+     *
+     * @return Time in seconds since last frame.
+     */
+    float calcDeltaTime();
+
+    float m_lastFrameTime = 0.0f;
+};
+
+} // namespace Core
+```
+
+### `src/core/Window.cpp`
+
+```cpp
+#include "Window.h"
+#include <iostream>
+#include <stdexcept>
+
+namespace Core
+{
+
+Window::Window(const WindowConfig& config) : m_config(config)
+{
+    glfwSetErrorCallback(errorCallback);
+
+    if (!glfwInit())
+        throw std::runtime_error("Failed to initialize GLFW");
+
+    // Request OpenGL 3.3 Core Profile
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // Required on macOS
+
+    m_glWindow =
+        glfwCreateWindow(m_config.width, m_config.height, m_config.title.c_str(), nullptr, nullptr);
+
+    if (!m_glWindow)
+    {
+        glfwTerminate();
+        throw std::runtime_error("Failed to create GLFW window");
+    }
+
+    glfwMakeContextCurrent(m_glWindow);
+
+    // Store a pointer to this Window object inside GLFW so static callbacks
+    // can reach back into our instance
+    glfwSetWindowUserPointer(m_glWindow, this);
+    glfwSetFramebufferSizeCallback(m_glWindow, framebufferSizeCallback);
+
+    if (m_config.vsync)
+        glfwSwapInterval(1); // lock to monitor refresh rate
+    else
+        glfwSwapInterval(0);
+
+    // Initialize GLAD after context is current
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+        throw std::runtime_error("Failed to initialize GLAD");
+
+    // Print context info
+    std::cout << "[Window] OpenGL " << glGetString(GL_VERSION) << "\n";
+    std::cout << "[Window] GPU: " << glGetString(GL_RENDERER) << "\n";
+}
+
+Window::~Window()
+{
+    if (m_glWindow)
+        glfwDestroyWindow(m_glWindow);
+    glfwTerminate();
+}
+
+bool Window::shouldClose() const
+{
+    return glfwWindowShouldClose(m_glWindow);
+}
+
+void Window::swapBuffers() const
+{
+    glfwSwapBuffers(m_glWindow);
+}
+
+void Window::pollEvents() const
+{
+    glfwPollEvents();
+}
+
+void Window::setTitle(const std::string& title)
+{
+    m_config.title = title;
+    glfwSetWindowTitle(m_glWindow, title.c_str());
+}
+
+float Window::getAspectRatio() const
+{
+    return static_cast<float>(m_config.width) / static_cast<float>(m_config.height);
+}
+
+// Static callback — GLFW calls this when the window is resized
+void Window::framebufferSizeCallback(GLFWwindow* window, int width, int height)
+{
+    // Retrieve our Window instance from the GLFW user pointer
+    auto* self            = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    self->m_config.width  = width;
+    self->m_config.height = height;
+    glViewport(0, 0, width, height);
+}
+
+void Window::errorCallback(int error, const char* description)
+{
+    std::cerr << "[GLFW Error " << error << "] " << description << "\n";
+}
+
+} // namespace Core
+```
+
+### `src/core/Window.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#include <string>
+
+namespace Core
+{
+
+/**
+ * @struct WindowConfig
+ * @brief Configuration parameters used to create a Window.
+ *
+ * @details
+ * This struct defines the initial state of the GLFW window
+ * and OpenGL context settings such as resolution, title,
+ * and vertical synchronization.
+ */
+struct WindowConfig
+{
+    int         width  = 800;      ///< Initial window width in pixels.
+    int         height = 600;      ///< Initial window height in pixels.
+    std::string title  = "OpenGL"; ///< Window title displayed in title bar.
+    bool        vsync  = true;     ///< Enables vertical synchronization if true.
+};
+
+/**
+ * @class Window
+ * @brief RAII wrapper around a GLFW window and OpenGL context.
+ *
+ * @details
+ * Responsibilities:
+ *  - Initialize GLFW
+ *  - Create an OpenGL 3.3 Core profile context
+ *  - Load OpenGL functions via GLAD
+ *  - Manage swap buffers and event polling
+ *  - Handle framebuffer resize events
+ *
+ * Ownership:
+ *  - Owns a GLFWwindow*
+ *  - Non-copyable (unique window owner)
+ *  - Movable
+ *
+ * Lifetime:
+ *  - GLFW is initialized in constructor
+ *  - GLFW is terminated in destructor
+ *
+ * @throws std::runtime_error if GLFW or GLAD initialization fails.
+ */
+class Window
+{
+  public:
+    /**
+     * @brief Creates a window and initializes the OpenGL context.
+     *
+     * @param config Window configuration parameters.
+     *
+     * @throws std::runtime_error if:
+     *  - GLFW fails to initialize
+     *  - Window creation fails
+     *  - GLAD fails to load OpenGL functions
+     */
+    explicit Window(const WindowConfig& config);
+
+    /**
+     * @brief Destroys the window and terminates GLFW.
+     */
+    ~Window();
+
+    Window(const Window&)            = delete;
+    Window& operator=(const Window&) = delete;
+
+    Window(Window&&)            = default;
+    Window& operator=(Window&&) = default;
+
+    /**
+     * @brief Checks whether the window should close.
+     *
+     * @return True if a close event has been triggered.
+     */
+    bool shouldClose() const;
+
+    /**
+     * @brief Swaps the front and back buffers.
+     */
+    void swapBuffers() const;
+
+    /**
+     * @brief Polls and processes pending window events.
+     */
+    void pollEvents() const;
+
+    /**
+     * @brief Sets a new window title.
+     *
+     * @param title New window title.
+     */
+    void setTitle(const std::string& title);
+
+    /**
+     * @return Current window width in pixels.
+     */
+    int getWidth() const
+    {
+        return m_config.width;
+    }
+
+    /**
+     * @return Current window height in pixels.
+     */
+    int getHeight() const
+    {
+        return m_config.height;
+    }
+
+    /**
+     * @brief Computes current aspect ratio.
+     *
+     * @return width / height.
+     */
+    float getAspectRatio() const;
+
+    /**
+     * @brief Returns underlying GLFW window pointer.
+     *
+     * @warning Exposes raw pointer — use carefully.
+     */
+    GLFWwindow* getNativeWindow() const
+    {
+        return m_glWindow;
+    }
+
+  private:
+    /**
+     * @brief GLFW framebuffer resize callback.
+     *
+     * Updates internal width/height and adjusts OpenGL viewport.
+     */
+    static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+
+    /**
+     * @brief GLFW error callback.
+     */
+    static void errorCallback(int error, const char* description);
+
+    GLFWwindow*  m_glWindow = nullptr; ///< Owned GLFW window handle.
+    WindowConfig m_config;             ///< Current window configuration.
+};
+
+} // namespace Core
+```
+
+### `src/renderer/Buffer.cpp`
+
+```cpp
+#include "Buffer.h"
+#include <stdexcept>
+
+namespace Renderer
+{
+
+Buffer::Buffer()
+{
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+}
+
+Buffer::~Buffer()
+{
+    if (m_ebo)
+        glDeleteBuffers(1, &m_ebo);
+    if (m_vbo)
+        glDeleteBuffers(1, &m_vbo);
+    if (m_vao)
+        glDeleteVertexArrays(1, &m_vao);
+}
+
+Buffer::Buffer(Buffer&& other) noexcept
+    : m_vao(other.m_vao), m_vbo(other.m_vbo), m_ebo(other.m_ebo), m_indexCount(other.m_indexCount),
+      m_vertexCount(other.m_vertexCount)
+{
+    other.m_vao = other.m_vbo = other.m_ebo = 0;
+}
+
+Buffer& Buffer::operator=(Buffer&& other) noexcept
+{
+    if (this != &other)
+    {
+        if (m_ebo)
+            glDeleteBuffers(1, &m_ebo);
+        if (m_vbo)
+            glDeleteBuffers(1, &m_vbo);
+        if (m_vao)
+            glDeleteVertexArrays(1, &m_vao);
+
+        m_vao         = other.m_vao;
+        m_vbo         = other.m_vbo;
+        m_ebo         = other.m_ebo;
+        m_indexCount  = other.m_indexCount;
+        m_vertexCount = other.m_vertexCount;
+        other.m_vao = other.m_vbo = other.m_ebo = 0;
+    }
+    return *this;
+}
+
+void Buffer::uploadVertices(const std::vector<float>&           vertices,
+                            const std::vector<VertexAttribute>& attributes, GLsizei stride)
+{
+    // The VAO records all the state set up below.
+    // After unbinding, re-binding the VAO restores all of it.
+    glBindVertexArray(m_vao);
+
+    // Upload raw float data to GPU memory
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(),
+                 GL_STATIC_DRAW); // hint: data uploaded once, drawn many times
+
+    // Describe the layout of that data — one call per attribute
+    for (const auto& attr : attributes)
+    {
+        glVertexAttribPointer(attr.location, // which shader input slot
+                              attr.count,    // how many floats
+                              GL_FLOAT,      // data type
+                              GL_FALSE,      // don't normalize
+                              stride,        // bytes between consecutive vertices
+                              reinterpret_cast<void*>(static_cast<uintptr_t>(attr.offset)));
+        glEnableVertexAttribArray(attr.location);
+    }
+
+    m_vertexCount = static_cast<GLsizei>(vertices.size() * sizeof(float)) / stride;
+
+    glBindVertexArray(0);             // unbind — VAO has recorded everything
+    glBindBuffer(GL_ARRAY_BUFFER, 0); // unbind - VBO's data is now in GPU
+}
+
+void Buffer::uploadIndices(const std::vector<uint32_t>& indices)
+{
+    if (!m_vao)
+        throw std::runtime_error("[Buffer] Call uploadVertices before uploadIndices");
+
+    glBindVertexArray(m_vao);
+
+    if (!m_ebo)
+        glGenBuffers(1, &m_ebo);
+
+    // EBO binding is recorded by the VAO — don't unbind EBO before VAO
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(),
+                 GL_STATIC_DRAW);
+
+    m_indexCount = static_cast<GLsizei>(indices.size());
+
+    glBindVertexArray(0);
+}
+
+void Buffer::bind() const
+{
+    glBindVertexArray(m_vao);
+}
+void Buffer::unbind() const
+{
+    glBindVertexArray(0);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Buffer.h`
+
+```cpp
+#pragma once
+
+#include <cstdint>
+#include <glad/glad.h>
+#include <vector>
+
+namespace Renderer
+{
+
+/**
+ * @struct VertexAttribute
+ * @brief Describes a single vertex attribute layout entry.
+ *
+ * Maps directly to:
+ *   layout(location = X) in GLSL.
+ */
+struct VertexAttribute
+{
+    GLuint  location; ///< Attribute location in shader
+    GLint   count;    ///< Number of components (e.g., 3 for vec3)
+    GLsizei offset;   ///< Byte offset from start of vertex
+};
+
+/**
+ * @class Buffer
+ * @brief RAII wrapper for VAO + VBO (+ optional EBO).
+ *
+ * @details
+ * Responsible for:
+ *  - Allocating OpenGL vertex buffers
+ *  - Uploading vertex data
+ *  - Defining attribute layout
+ *  - Optional indexed drawing support
+ *
+ * Ownership:
+ *  - Owns VAO, VBO, optional EBO
+ *  - Non-copyable
+ *  - Movable
+ */
+class Buffer
+{
+  public:
+    Buffer();
+    ~Buffer();
+
+    Buffer(const Buffer&)            = delete;
+    Buffer& operator=(const Buffer&) = delete;
+
+    Buffer(Buffer&& other) noexcept;
+    Buffer& operator=(Buffer&& other) noexcept;
+
+    /**
+     * @brief Uploads vertex data and configures layout.
+     *
+     * @param vertices Flat float array (interleaved)
+     * @param attributes Vertex attribute descriptions
+     * @param stride Size of one vertex in bytes
+     */
+    void uploadVertices(const std::vector<float>&           vertices,
+                        const std::vector<VertexAttribute>& attributes, GLsizei stride);
+
+    /**
+     * @brief Uploads index data for indexed drawing.
+     *
+     * @param indices Index buffer data
+     *
+     * @throws std::runtime_error if called before uploadVertices.
+     */
+    void uploadIndices(const std::vector<uint32_t>& indices);
+
+    void bind() const;
+    void unbind() const;
+
+    bool hasIndices() const
+    {
+        return m_ebo != 0;
+    }
+    GLsizei indexCount() const
+    {
+        return m_indexCount;
+    }
+    GLsizei vertexCount() const
+    {
+        return m_vertexCount;
+    }
+
+  private:
+    GLuint m_vao = 0;
+    GLuint m_vbo = 0;
+    GLuint m_ebo = 0;
+
+    GLsizei m_indexCount  = 0;
+    GLsizei m_vertexCount = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Material.cpp`
+
+```cpp
+#include "Material.h"
+
+namespace Renderer {
+
+void Material::bind(const Shader& shader) const {
+
+    // ── Albedo / diffuse map (unit 0) ─────────────────────────────────────────
+    if (diffuseMap) {
+        diffuseMap->bind(0);
+        shader.setInt ("u_material.diffuseMap",  0);
+        shader.setBool("u_material.hasDiffuse",  true);
+    } else {
+        shader.setBool("u_material.hasDiffuse",  false);
+        shader.setVec3("u_material.diffuseColor", diffuseColor);
+    }
+
+    // ── Normal map (unit 1) ───────────────────────────────────────────────────
+    if (normalMap) {
+        normalMap->bind(1);
+        shader.setInt ("u_material.normalMap",  1);
+        shader.setBool("u_material.hasNormal",  true);
+    } else {
+        shader.setBool("u_material.hasNormal",  false);
+    }
+
+    // ── Roughness map (unit 2) ────────────────────────────────────────────────
+    if (roughnessMap) {
+        roughnessMap->bind(2);
+        shader.setInt ("u_material.roughnessMap",  2);
+        shader.setBool("u_material.hasRoughness",  true);
+    } else {
+        shader.setBool("u_material.hasRoughness",  false);
+        shader.setFloat("u_material.roughness",    roughness);
+    }
+
+    // ── Metallic map (unit 3) ─────────────────────────────────────────────────
+    if (metallicMap) {
+        metallicMap->bind(3);
+        shader.setInt ("u_material.metallicMap",  3);
+        shader.setBool("u_material.hasMetallic",  true);
+    } else {
+        shader.setBool("u_material.hasMetallic",  false);
+        shader.setFloat("u_material.metallic",    metallic);
+    }
+
+    // ── AO map (unit 4) ───────────────────────────────────────────────────────
+    if (aoMap) {
+        aoMap->bind(4);
+        shader.setInt ("u_material.aoMap",  4);
+        shader.setBool("u_material.hasAO",  true);
+    } else {
+        shader.setBool("u_material.hasAO",  false);
+    }
+
+    // ── Legacy Blinn-Phong scalars ────────────────────────────────────────────
+    // Still set so the shader can fall back gracefully for non-PBR models.
+    shader.setVec3 ("u_material.specularColor", specularColor);
+    shader.setFloat("u_material.shininess",     shininess);
+}
+
+void Material::unbind() const {
+    if (diffuseMap)   diffuseMap->unbind();
+    if (normalMap)    normalMap->unbind();
+    if (roughnessMap) roughnessMap->unbind();
+    if (metallicMap)  metallicMap->unbind();
+    if (aoMap)        aoMap->unbind();
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Material.h`
+
+```cpp
+#pragma once
+
+#include "Texture.h"
+#include "Shader.h"
+
+#include <glm/glm.hpp>
+#include <memory>
+#include <string>
+
+namespace Renderer {
+
+// A Material describes how a surface looks — which texture maps it has
+// and what scalar properties it carries. It knows how to bind itself
+// to a shader before a draw call.
+//
+// Supports both legacy Blinn-Phong and full PBR (metallic/roughness workflow).
+// The shader selects the right path based on which maps are present.
+//
+// Texture unit convention (fixed — shaders rely on these slots):
+//   unit 0 = albedo/diffuse
+//   unit 1 = normal
+//   unit 2 = roughness
+//   unit 3 = metallic
+//   unit 4 = ambient occlusion (AO)
+class Material {
+public:
+    Material() = default;
+
+    // Bind all available textures to their designated units and set
+    // all uniforms the shader expects. Call before mesh->draw().
+    void bind(const Shader& shader) const;
+    void unbind() const;
+
+    // ── Texture maps ──────────────────────────────────────────────────────────
+    std::shared_ptr<Texture> diffuseMap;    // unit 0 — albedo / base color
+    std::shared_ptr<Texture> normalMap;     // unit 1 — tangent-space normals
+    std::shared_ptr<Texture> roughnessMap;  // unit 2 — perceptual roughness
+    std::shared_ptr<Texture> metallicMap;   // unit 3 — metallic mask
+    std::shared_ptr<Texture> aoMap;         // unit 4 — ambient occlusion
+
+    // ── Scalar fallbacks ──────────────────────────────────────────────────────
+    // Used when the corresponding texture map is absent.
+    glm::vec3 diffuseColor  { 0.8f, 0.8f, 0.8f };
+    float     roughness     { 0.5f };   // 0 = mirror-smooth, 1 = fully rough
+    float     metallic      { 0.0f };   // 0 = dielectric,    1 = metal
+
+    // Legacy Blinn-Phong fallbacks (used when no PBR maps are present)
+    glm::vec3 specularColor { 0.5f, 0.5f, 0.5f };
+    float     shininess     { 32.0f };
+
+    std::string name;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Mesh.cpp`
+
+```cpp
+#include "Mesh.h"
+#include <glad/glad.h>
+
+namespace Renderer {
+
+Mesh::Mesh(const std::vector<Vertex>&   vertices,
+           const std::vector<uint32_t>& indices,
+           std::shared_ptr<Material>    material)
+    : m_material(std::move(material))
+{
+    m_vertexCount = vertices.size();
+    m_indexCount  = indices.size();
+    setupBuffer(vertices, indices);
+}
+
+void Mesh::setupBuffer(const std::vector<Vertex>&   vertices,
+                       const std::vector<uint32_t>& indices)
+{
+    // Memory layout of one Vertex (stride = 56 bytes):
+    //
+    // Offset  0: position  (vec3 = 12 bytes)
+    // Offset 12: texCoord  (vec2 =  8 bytes)
+    // Offset 20: normal    (vec3 = 12 bytes)
+    // Offset 32: tangent   (vec3 = 12 bytes)
+    // Offset 44: bitangent (vec3 = 12 bytes)
+    // Total: 56 bytes
+
+    std::vector<float> flatData;
+    flatData.reserve(vertices.size() * 14); // 14 floats per vertex
+
+    for (const auto& v : vertices) {
+        flatData.push_back(v.position.x);
+        flatData.push_back(v.position.y);
+        flatData.push_back(v.position.z);
+        flatData.push_back(v.texCoord.x);
+        flatData.push_back(v.texCoord.y);
+        flatData.push_back(v.normal.x);
+        flatData.push_back(v.normal.y);
+        flatData.push_back(v.normal.z);
+        flatData.push_back(v.tangent.x);
+        flatData.push_back(v.tangent.y);
+        flatData.push_back(v.tangent.z);
+        flatData.push_back(v.bitangent.x);
+        flatData.push_back(v.bitangent.y);
+        flatData.push_back(v.bitangent.z);
+    }
+
+    // Location binding matches the vertex shader's layout(location = N)
+    std::vector<VertexAttribute> attributes = {
+        { 0,  3,  0 },   // a_position  : vec3 at offset 0
+        { 1,  2, 12 },   // a_texCoord  : vec2 at offset 12
+        { 2,  3, 20 },   // a_normal    : vec3 at offset 20
+        { 3,  3, 32 },   // a_tangent   : vec3 at offset 32
+        { 4,  3, 44 },   // a_bitangent : vec3 at offset 44
+    };
+
+    m_buffer.uploadVertices(flatData, attributes, sizeof(Vertex));
+    m_buffer.uploadIndices(indices);
+}
+
+void Mesh::draw(const Shader& shader) const {
+    if (m_material)
+        m_material->bind(shader);
+
+    m_buffer.bind();
+    glDrawElements(GL_TRIANGLES,
+                   static_cast<GLsizei>(m_indexCount),
+                   GL_UNSIGNED_INT,
+                   0);
+    m_buffer.unbind();
+
+    if (m_material)
+        m_material->unbind();
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Mesh.h`
+
+```cpp
+#pragma once
+
+#include "Buffer.h"
+#include "Shader.h"
+#include "Material.h"
+
+#include <glm/glm.hpp>
+#include <vector>
+#include <memory>
+
+namespace Renderer {
+
+// One vertex — interleaved layout in GPU memory.
+// Tangent and bitangent are included now, computed by Assimp,
+// and will be used in Step 7 for normal mapping.
+struct Vertex {
+    glm::vec3 position;
+    glm::vec2 texCoord;
+    glm::vec3 normal;
+    glm::vec3 tangent;    // points along U direction of the texture
+    glm::vec3 bitangent;  // points along V direction of the texture
+};
+
+// A Mesh is one drawable unit: geometry + material.
+// Assimp may produce many Meshes per model file, one per material group.
+class Mesh {
+public:
+    Mesh(const std::vector<Vertex>&   vertices,
+         const std::vector<uint32_t>& indices,
+         std::shared_ptr<Material>    material);
+
+    Mesh(const Mesh&)            = delete;
+    Mesh& operator=(const Mesh&) = delete;
+    Mesh(Mesh&&)                 = default;
+    Mesh& operator=(Mesh&&)      = default;
+
+    // Binds material, issues draw call. Shader must be bound by caller.
+    void draw(const Shader& shader) const;
+
+    const Material* getMaterial() const { return m_material.get(); }
+    size_t vertexCount() const { return m_vertexCount; }
+    size_t indexCount()  const { return m_indexCount; }
+
+private:
+    void setupBuffer(const std::vector<Vertex>&   vertices,
+                     const std::vector<uint32_t>& indices);
+
+    Buffer                    m_buffer;
+    std::shared_ptr<Material> m_material;
+    size_t m_vertexCount = 0;
+    size_t m_indexCount  = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Model.cpp`
+
+```cpp
+#include "Model.h"
+
+namespace Renderer {
+
+Model::Model(std::vector<std::unique_ptr<Mesh>> meshes)
+    : m_meshes(std::move(meshes))
+{
+    rebuildModelMatrix();
+}
+
+void Model::draw(const Shader& shader) const {
+    shader.setMat4("u_model", m_modelMatrix);
+    for (const auto& mesh : m_meshes)
+        mesh->draw(shader);
+}
+
+void Model::setPosition(const glm::vec3& pos) {
+    m_position = pos;
+    rebuildModelMatrix();
+}
+
+void Model::setRotation(float angleDegrees, const glm::vec3& axis) {
+    m_angleDeg     = angleDegrees;
+    m_rotationAxis = axis;
+    rebuildModelMatrix();
+}
+
+void Model::setScale(const glm::vec3& scale) {
+    m_scale = scale;
+    rebuildModelMatrix();
+}
+
+void Model::setScale(float uniformScale) {
+    m_scale = glm::vec3(uniformScale);
+    rebuildModelMatrix();
+}
+
+void Model::setBaseRotation(float angleDegrees, const glm::vec3& axis) {
+    m_baseRotation = glm::rotate(glm::mat4(1.0f), glm::radians(angleDegrees), axis);
+    rebuildModelMatrix();
+}
+
+void Model::rebuildModelMatrix() {
+    // Correct transform order (applied right-to-left by GPU):
+    //   1. baseRotation — fixes model's rest orientation in model space (innermost)
+    //   2. spin         — rotates around world Y axis
+    //   3. translate    — moves to world position
+    //   4. scale        — uniform scale
+    //
+    // Key insight: baseRotation must be the INNERMOST operation so it always
+    // corrects the model's local axes regardless of the current spin angle.
+    // If it were applied after the spin, its axis would rotate with the model
+    // and produce wrong normals (black patches) at certain orientations.
+    glm::mat4 m = glm::mat4(1.0f);
+    m = glm::translate(m, m_position);
+    m = glm::rotate(m, glm::radians(m_angleDeg), m_rotationAxis);
+    m = glm::scale(m, m_scale);
+    m_modelMatrix = m * m_baseRotation;  // base fix is innermost — model space
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Model.h`
+
+```cpp
+#pragma once
+
+#include "Mesh.h"
+#include "Shader.h"
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <memory>
+#include <string>
+
+namespace Renderer {
+
+// A Model is a collection of Meshes loaded from a single model file.
+// It holds the model-space transform and delegates draw calls to its meshes.
+//
+// Assimp may split one model file into many meshes (one per material).
+// Model reunites them under one object you can place in a scene.
+class Model {
+public:
+    explicit Model(std::vector<std::unique_ptr<Mesh>> meshes);
+
+    // Draw all meshes with the given shader.
+    // Sets u_model uniform before drawing.
+    void draw(const Shader& shader) const;
+
+    // ── Transform API ─────────────────────────────────────────────────────────
+    void setPosition(const glm::vec3& pos);
+    void setRotation(float angleDegrees, const glm::vec3& axis);
+    void setScale   (const glm::vec3& scale);
+    void setScale   (float uniformScale);
+
+    // Fix-up rotation applied before the spin — use this to correct a model's
+    // rest orientation (e.g. an FBX exported on its side from Blender).
+    // setRotation() / the per-frame spin are applied on top of this.
+    void setBaseRotation(float angleDegrees, const glm::vec3& axis);
+
+    const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
+
+    size_t meshCount() const { return m_meshes.size(); }
+
+private:
+    void rebuildModelMatrix();
+
+    std::vector<std::unique_ptr<Mesh>> m_meshes;
+
+    glm::vec3 m_position    { 0.0f };
+    glm::vec3 m_scale       { 1.0f };
+    float     m_angleDeg    { 0.0f };
+    glm::vec3 m_rotationAxis{ 0.0f, 1.0f, 0.0f };
+    glm::mat4 m_baseRotation{ 1.0f };  // orientation fix, identity by default
+
+    glm::mat4 m_modelMatrix { 1.0f };
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Shader.cpp`
+
+```cpp
+#include "Shader.h"
+
+#include <fstream>
+#include <glm/gtc/type_ptr.hpp>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+
+namespace Renderer
+{
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Construction / Destruction
+// ─────────────────────────────────────────────────────────────────────────────
+Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
+{
+    std::string vertSource = readFile(vertexPath);
+    std::string fragSource = readFile(fragmentPath);
+
+    GLuint vertShader = compileShader(GL_VERTEX_SHADER, vertSource);
+    GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);
+
+    // Link both compiled stages into a program
+    m_glShaderProgramID = glCreateProgram();
+    glAttachShader(m_glShaderProgramID, vertShader);
+    glAttachShader(m_glShaderProgramID, fragShader);
+    glLinkProgram(m_glShaderProgramID);
+    checkLinkErrors(m_glShaderProgramID);
+
+    // Compiled stages are now baked into the program — release them
+    glDeleteShader(vertShader);
+    glDeleteShader(fragShader);
+
+    std::cout << "[Shader] Linked program " << m_glShaderProgramID << " (" << vertexPath << ", "
+              << fragmentPath << ")\n";
+}
+
+Shader::~Shader()
+{
+    if (m_glShaderProgramID)
+        glDeleteProgram(m_glShaderProgramID);
+}
+
+Shader::Shader(Shader&& other) noexcept : m_glShaderProgramID(other.m_glShaderProgramID)
+{
+    other.m_glShaderProgramID = 0; // transfer ownership, invalidate source
+}
+
+Shader& Shader::operator=(Shader&& other) noexcept
+{
+    if (this != &other)
+    {
+        if (m_glShaderProgramID)
+            glDeleteProgram(m_glShaderProgramID);
+        m_glShaderProgramID       = other.m_glShaderProgramID;
+        other.m_glShaderProgramID = 0;
+    }
+    return *this;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bind / Unbind
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Shader::bind() const
+{
+    glUseProgram(m_glShaderProgramID);
+}
+void Shader::unbind() const
+{
+    glUseProgram(0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Uniform Setters
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Shader::setBool(const std::string& name, bool value) const
+{
+    glUniform1i(getUniformLocation(name), static_cast<int>(value));
+}
+
+void Shader::setInt(const std::string& name, int value) const
+{
+    glUniform1i(getUniformLocation(name), value);
+}
+
+void Shader::setFloat(const std::string& name, float value) const
+{
+    glUniform1f(getUniformLocation(name), value);
+}
+
+void Shader::setVec2(const std::string& name, const glm::vec2& value) const
+{
+    glUniform2fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setVec3(const std::string& name, const glm::vec3& value) const
+{
+    glUniform3fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setVec4(const std::string& name, const glm::vec4& value) const
+{
+    glUniform4fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setMat3(const std::string& name, const glm::mat3& value) const
+{
+    // GL_FALSE: GLM is already column-major, matching OpenGL's expectation
+    glUniformMatrix3fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::setMat4(const std::string& name, const glm::mat4& value) const
+{
+    glUniformMatrix4fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Private Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::string Shader::readFile(const std::string& path)
+{
+    std::ifstream file(path);
+    if (!file.is_open())
+        throw std::runtime_error("[Shader] Cannot open file: " + path);
+
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    return ss.str();
+}
+
+GLuint Shader::compileShader(GLenum type, const std::string& source)
+{
+    GLuint      shader = glCreateShader(type);
+    const char* src    = source.c_str();
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+
+    std::string label = (type == GL_VERTEX_SHADER) ? "VERTEX" : "FRAGMENT";
+    checkCompileErrors(shader, label);
+
+    return shader;
+}
+
+void Shader::checkCompileErrors(GLuint shader, const std::string& label)
+{
+    GLint success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        GLchar log[1024];
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        throw std::runtime_error("[Shader] " + label + " compilation failed:\n" + log);
+    }
+}
+
+void Shader::checkLinkErrors(GLuint program)
+{
+    GLint success;
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        GLchar log[1024];
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        throw std::runtime_error(std::string("[Shader] Program linking failed:\n") + log);
+    }
+}
+
+GLint Shader::getUniformLocation(const std::string& name) const
+{
+    // glGetUniformLocation is a driver call — doing it every frame for every
+    // uniform is wasteful. A proper cache would store results in an
+    // unordered_map<string, GLint>. We keep it simple for now and will
+    // add the cache in the ResourceManager step.
+    GLint location = glGetUniformLocation(m_glShaderProgramID, name.c_str());
+    if (location == -1)
+        std::cerr << "[Shader] Warning: uniform '" << name << "' not found\n";
+    return location;
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Shader.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+#include <glm/glm.hpp>
+#include <string>
+
+namespace Renderer
+{
+
+/**
+ * @class Shader
+ * @brief RAII wrapper around an OpenGL shader program.
+ * 
+ * Responsible for:
+ *  - Reading GLSL files from disk
+ *  - Compiling vertex and fragment shaders
+ *  - Linking them into a program
+ *  - Providing uniform setters
+ *
+ * Ownership:
+ *  - Owns one OpenGL program (GLuint)
+ *  - Non-copyable
+ *  - Movable
+ *
+ * Throws std::runtime_error if compilation or linking fails.
+ */
+class Shader
+{
+  public:
+    /**
+     * @brief Constructs and links a shader program from two GLSL files.
+     *
+     * @param vertexPath Path to vertex shader file.
+     * @param fragmentPath Path to fragment shader file.
+     *
+     * @throws std::runtime_error if file reading, compilation, or linking fails.
+     */
+    Shader(const std::string& vertexPath, const std::string& fragmentPath);
+
+    ~Shader();
+
+    Shader(const Shader&)            = delete;
+    Shader& operator=(const Shader&) = delete;
+
+    Shader(Shader&& other) noexcept;
+    Shader& operator=(Shader&& other) noexcept;
+
+    /**
+     * @brief Activates this shader program.
+     */
+    void bind() const;
+
+    /**
+     * @brief Deactivates any active shader program.
+     */
+    void unbind() const;
+
+    /**
+     * @return OpenGL program ID.
+     */
+    GLuint getID() const
+    {
+        return m_glShaderProgramID;
+    }
+
+    /// Uniform setters
+    void setBool(const std::string& name, bool value) const;
+    void setInt(const std::string& name, int value) const;
+    void setFloat(const std::string& name, float value) const;
+    void setVec2(const std::string& name, const glm::vec2& value) const;
+    void setVec3(const std::string& name, const glm::vec3& value) const;
+    void setVec4(const std::string& name, const glm::vec4& value) const;
+    void setMat3(const std::string& name, const glm::mat3& value) const;
+    void setMat4(const std::string& name, const glm::mat4& value) const;
+
+  private:
+    GLuint m_glShaderProgramID = 0;
+
+    static std::string readFile(const std::string& path);
+    static GLuint      compileShader(GLenum type, const std::string& source);
+    static void        checkCompileErrors(GLuint shader, const std::string& label);
+    static void        checkLinkErrors(GLuint program);
+
+    /**
+     * @brief Retrieves uniform location.
+     *
+     * @warning This performs a driver call. Consider caching for performance.
+     */
+    GLint getUniformLocation(const std::string& name) const;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/ShadowMap.cpp`
+
+```cpp
+#include "ShadowMap.h"
+
+#include <stdexcept>
+
+namespace Renderer {
+
+ShadowMap::ShadowMap() {
+
+    // ── Depth texture ─────────────────────────────────────────────────────────
+    // GL_DEPTH_COMPONENT24: 24-bit depth precision — matches typical hardware.
+    // We store only depth, no colour.
+    glGenTextures(1, &m_depthTexture);
+    glBindTexture(GL_TEXTURE_2D, m_depthTexture);
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_DEPTH_COMPONENT24,  // internal format: 24-bit depth
+                 WIDTH, HEIGHT,
+                 0,
+                 GL_DEPTH_COMPONENT,    // data format
+                 GL_FLOAT,              // data type
+                 nullptr);              // no CPU data — GPU will fill it
+
+    // Nearest filtering: for depth comparison we want exact texel values,
+    // not interpolated ones. Linear filtering on depth makes PCF look odd.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Clamp to border with depth 1.0 (maximum depth = fully lit).
+    // Without this, UVs outside [0,1] — i.e. fragments outside the light
+    // frustum — would repeat the shadow map edge and appear incorrectly shadowed.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ── Framebuffer ───────────────────────────────────────────────────────────
+    glGenFramebuffers(1, &m_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+
+    // Attach our depth texture as the depth buffer.
+    // No colour attachment — this is a depth-only FBO.
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_DEPTH_ATTACHMENT,
+                           GL_TEXTURE_2D,
+                           m_depthTexture,
+                           0); // mip level 0
+
+    // Tell OpenGL explicitly: no colour reads or writes.
+    // Required — without this the FBO is incomplete on some drivers.
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        throw std::runtime_error("[ShadowMap] Framebuffer incomplete");
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+ShadowMap::~ShadowMap() {
+    if (m_fbo)          glDeleteFramebuffers(1, &m_fbo);
+    if (m_depthTexture) glDeleteTextures(1, &m_depthTexture);
+}
+
+void ShadowMap::bindForWriting() const {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glClear(GL_DEPTH_BUFFER_BIT);  // clear last frame's depth data
+}
+
+void ShadowMap::unbindWriting() const {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void ShadowMap::bindTextureToUnit(GLuint unit) const {
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, m_depthTexture);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/ShadowMap.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+
+namespace Renderer {
+
+// ShadowMap owns a framebuffer with a single depth texture attachment.
+// Usage each frame:
+//
+//   1. shadowMap.bindForWriting();          // shadow pass: render scene depth
+//      glViewport(0, 0, SHADOW_W, SHADOW_H);
+//      // ... draw all shadow-casting geometry with shadow shader ...
+//
+//   2. shadowMap.bindTextureToUnit(5);       // main pass: sample the depth texture
+//      shader.setInt("u_shadowMap", 5);
+//
+// Resolution: higher = sharper shadows, more VRAM.
+// 2048x2048 is a good default for medium-range scenes.
+
+class ShadowMap {
+public:
+    static constexpr int WIDTH  = 2048;
+    static constexpr int HEIGHT = 2048;
+
+    ShadowMap();
+    ~ShadowMap();
+
+    ShadowMap(const ShadowMap&)            = delete;
+    ShadowMap& operator=(const ShadowMap&) = delete;
+
+    // Bind the shadow FBO for the depth-write pass.
+    // Call glViewport(0,0,WIDTH,HEIGHT) after this.
+    void bindForWriting() const;
+
+    // Restore the default framebuffer after the shadow pass.
+    // Call glViewport(0,0,screenW,screenH) after this.
+    void unbindWriting() const;
+
+    // Bind the depth texture to a specific texture unit for sampling
+    // in the main lighting shader.
+    void bindTextureToUnit(GLuint unit) const;
+
+    GLuint getDepthTexture() const { return m_depthTexture; }
+
+private:
+    GLuint m_fbo          = 0;
+    GLuint m_depthTexture = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Texture.cpp`
+
+```cpp
+#include "Texture.h"
+
+// STB_IMAGE_IMPLEMENTATION must be defined in exactly one .cpp file.
+// This tells the header to include the full function definitions here.
+// Every other file that needs stb_image just includes the header without
+// the define — otherwise you'd get duplicate symbol linker errors.
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+#include <iostream>
+#include <stdexcept>
+
+namespace Renderer {
+
+Texture::Texture(const std::string& path) : m_path(path) {
+
+    // stb_image loads images with (0,0) at the top-left.
+    // OpenGL expects (0,0) at the bottom-left.
+    // This one call flips all images on load so UVs work correctly.
+    stbi_set_flip_vertically_on_load(true);
+
+    // Decode the image preserving its original channel count.
+    // Forcing 4 channels (RGBA) on everything corrupts single-channel maps
+    // (roughness, AO) and can shift the blue channel of normal maps.
+    // We pass 0 so stb_image returns exactly what's in the file, then
+    // pick the matching GL format below.
+    unsigned char* data = stbi_load(path.c_str(),
+                                    &m_width, &m_height, &m_channels, 0);
+    if (!data) {
+        throw std::runtime_error("[Texture] Failed to load: " + path +
+                                 "\n  Reason: " + stbi_failure_reason());
+    }
+
+    std::cout << "[Texture] Loaded: " << path
+              << " (" << m_width << "x" << m_height
+              << ", " << m_channels << " channels)\n";
+
+    // Choose GL format based on actual channel count.
+    // internalFormat = how the GPU stores it.
+    // dataFormat     = how the CPU-side bytes are laid out.
+    GLenum internalFormat, dataFormat;
+    switch (m_channels) {
+        case 1:  internalFormat = GL_R8;    dataFormat = GL_RED;  break;
+        case 2:  internalFormat = GL_RG8;   dataFormat = GL_RG;   break;
+        case 3:  internalFormat = GL_RGB8;  dataFormat = GL_RGB;  break;
+        case 4:  internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+        default: internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+    }
+
+    // ── Generate GPU texture object ───────────────────────────────────────────
+    glGenTextures(1, &m_textureID);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+
+    // For single-channel textures (roughness, AO, metallic) the default swizzle
+    // reads R into R only, leaving G/B as 0. We want to sample it as .r in GLSL
+    // which works fine — but set swizzle so all channels read from R, making
+    // texture().rgb work correctly too if ever needed.
+    if (m_channels == 1) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    }
+
+    // ── Wrapping mode ─────────────────────────────────────────────────────────
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    // ── Filtering mode ────────────────────────────────────────────────────────
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // ── Upload pixel data to GPU ──────────────────────────────────────────────
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 internalFormat,
+                 m_width, m_height,
+                 0,
+                 dataFormat,
+                 GL_UNSIGNED_BYTE,
+                 data);
+
+    // ── Generate mipmap chain ─────────────────────────────────────────────────
+    // Automatically creates 512x512, 256x256, 128x128... down to 1x1.
+    // Must be called AFTER glTexImage2D so the base level exists.
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    // ── Free CPU memory ───────────────────────────────────────────────────────
+    // GPU now has its own copy. The CPU-side bytes are no longer needed.
+    stbi_image_free(data);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+Texture::~Texture() {
+    if (m_textureID)
+        glDeleteTextures(1, &m_textureID);
+}
+
+Texture::Texture(Texture&& other) noexcept
+    : m_textureID(other.m_textureID),
+      m_width(other.m_width),
+      m_height(other.m_height),
+      m_channels(other.m_channels),
+      m_path(std::move(other.m_path))
+{
+    other.m_textureID = 0;
+}
+
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this != &other) {
+        if (m_textureID) glDeleteTextures(1, &m_textureID);
+        m_textureID       = other.m_textureID;
+        m_width           = other.m_width;
+        m_height          = other.m_height;
+        m_channels        = other.m_channels;
+        m_path            = std::move(other.m_path);
+        other.m_textureID = 0;
+    }
+    return *this;
+}
+
+void Texture::bind(GLuint unit) const {
+    // Activate the texture unit slot first, then bind our texture to it.
+    // GL_TEXTURE0 + 1 = GL_TEXTURE1, + 2 = GL_TEXTURE2, etc.
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+}
+
+void Texture::unbind() const {
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Texture.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+#include <string>
+
+namespace Renderer {
+
+class Texture {
+public:
+    // Load an image from disk and upload to GPU.
+    // Throws std::runtime_error if the file cannot be loaded.
+    explicit Texture(const std::string& path);
+    ~Texture();
+
+    // Non-copyable — owns a GPU texture handle
+    Texture(const Texture&)            = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    // Movable
+    Texture(Texture&& other) noexcept;
+    Texture& operator=(Texture&& other) noexcept;
+
+    // Bind this texture to a specific texture unit slot.
+    // unit=0 → GL_TEXTURE0, unit=1 → GL_TEXTURE1, etc.
+    // Call this before the draw call that needs this texture.
+    void bind(GLuint unit = 0) const;
+    void unbind() const;
+
+    GLuint      getID()     const { return m_textureID; }
+    int         getWidth()  const { return m_width; }
+    int         getHeight() const { return m_height; }
+    const std::string& getPath() const { return m_path; }
+
+private:
+    GLuint      m_textureID = 0;
+    int         m_width     = 0;
+    int         m_height    = 0;
+    int         m_channels  = 0;
+    std::string m_path;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Buffer.cpp`
+
+```cpp
+#include "Buffer.h"
+#include <stdexcept>
+
+namespace Renderer
+{
+
+Buffer::Buffer()
+{
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+}
+
+Buffer::~Buffer()
+{
+    if (m_ebo)
+        glDeleteBuffers(1, &m_ebo);
+    if (m_vbo)
+        glDeleteBuffers(1, &m_vbo);
+    if (m_vao)
+        glDeleteVertexArrays(1, &m_vao);
+}
+
+Buffer::Buffer(Buffer&& other) noexcept
+    : m_vao(other.m_vao), m_vbo(other.m_vbo), m_ebo(other.m_ebo), m_indexCount(other.m_indexCount),
+      m_vertexCount(other.m_vertexCount)
+{
+    other.m_vao = other.m_vbo = other.m_ebo = 0;
+}
+
+Buffer& Buffer::operator=(Buffer&& other) noexcept
+{
+    if (this != &other)
+    {
+        if (m_ebo)
+            glDeleteBuffers(1, &m_ebo);
+        if (m_vbo)
+            glDeleteBuffers(1, &m_vbo);
+        if (m_vao)
+            glDeleteVertexArrays(1, &m_vao);
+
+        m_vao         = other.m_vao;
+        m_vbo         = other.m_vbo;
+        m_ebo         = other.m_ebo;
+        m_indexCount  = other.m_indexCount;
+        m_vertexCount = other.m_vertexCount;
+        other.m_vao = other.m_vbo = other.m_ebo = 0;
+    }
+    return *this;
+}
+
+void Buffer::uploadVertices(const std::vector<float>&           vertices,
+                            const std::vector<VertexAttribute>& attributes, GLsizei stride)
+{
+    // The VAO records all the state set up below.
+    // After unbinding, re-binding the VAO restores all of it.
+    glBindVertexArray(m_vao);
+
+    // Upload raw float data to GPU memory
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(),
+                 GL_STATIC_DRAW); // hint: data uploaded once, drawn many times
+
+    // Describe the layout of that data — one call per attribute
+    for (const auto& attr : attributes)
+    {
+        glVertexAttribPointer(attr.location, // which shader input slot
+                              attr.count,    // how many floats
+                              GL_FLOAT,      // data type
+                              GL_FALSE,      // don't normalize
+                              stride,        // bytes between consecutive vertices
+                              reinterpret_cast<void*>(static_cast<uintptr_t>(attr.offset)));
+        glEnableVertexAttribArray(attr.location);
+    }
+
+    m_vertexCount = static_cast<GLsizei>(vertices.size() * sizeof(float)) / stride;
+
+    glBindVertexArray(0);             // unbind — VAO has recorded everything
+    glBindBuffer(GL_ARRAY_BUFFER, 0); // unbind - VBO's data is now in GPU
+}
+
+void Buffer::uploadIndices(const std::vector<uint32_t>& indices)
+{
+    if (!m_vao)
+        throw std::runtime_error("[Buffer] Call uploadVertices before uploadIndices");
+
+    glBindVertexArray(m_vao);
+
+    if (!m_ebo)
+        glGenBuffers(1, &m_ebo);
+
+    // EBO binding is recorded by the VAO — don't unbind EBO before VAO
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(),
+                 GL_STATIC_DRAW);
+
+    m_indexCount = static_cast<GLsizei>(indices.size());
+
+    glBindVertexArray(0);
+}
+
+void Buffer::bind() const
+{
+    glBindVertexArray(m_vao);
+}
+void Buffer::unbind() const
+{
+    glBindVertexArray(0);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Buffer.h`
+
+```cpp
+#pragma once
+
+#include <cstdint>
+#include <glad/glad.h>
+#include <vector>
+
+namespace Renderer
+{
+
+/**
+ * @struct VertexAttribute
+ * @brief Describes a single vertex attribute layout entry.
+ *
+ * Maps directly to:
+ *   layout(location = X) in GLSL.
+ */
+struct VertexAttribute
+{
+    GLuint  location; ///< Attribute location in shader
+    GLint   count;    ///< Number of components (e.g., 3 for vec3)
+    GLsizei offset;   ///< Byte offset from start of vertex
+};
+
+/**
+ * @class Buffer
+ * @brief RAII wrapper for VAO + VBO (+ optional EBO).
+ *
+ * @details
+ * Responsible for:
+ *  - Allocating OpenGL vertex buffers
+ *  - Uploading vertex data
+ *  - Defining attribute layout
+ *  - Optional indexed drawing support
+ *
+ * Ownership:
+ *  - Owns VAO, VBO, optional EBO
+ *  - Non-copyable
+ *  - Movable
+ */
+class Buffer
+{
+  public:
+    Buffer();
+    ~Buffer();
+
+    Buffer(const Buffer&)            = delete;
+    Buffer& operator=(const Buffer&) = delete;
+
+    Buffer(Buffer&& other) noexcept;
+    Buffer& operator=(Buffer&& other) noexcept;
+
+    /**
+     * @brief Uploads vertex data and configures layout.
+     *
+     * @param vertices Flat float array (interleaved)
+     * @param attributes Vertex attribute descriptions
+     * @param stride Size of one vertex in bytes
+     */
+    void uploadVertices(const std::vector<float>&           vertices,
+                        const std::vector<VertexAttribute>& attributes, GLsizei stride);
+
+    /**
+     * @brief Uploads index data for indexed drawing.
+     *
+     * @param indices Index buffer data
+     *
+     * @throws std::runtime_error if called before uploadVertices.
+     */
+    void uploadIndices(const std::vector<uint32_t>& indices);
+
+    void bind() const;
+    void unbind() const;
+
+    bool hasIndices() const
+    {
+        return m_ebo != 0;
+    }
+    GLsizei indexCount() const
+    {
+        return m_indexCount;
+    }
+    GLsizei vertexCount() const
+    {
+        return m_vertexCount;
+    }
+
+  private:
+    GLuint m_vao = 0;
+    GLuint m_vbo = 0;
+    GLuint m_ebo = 0;
+
+    GLsizei m_indexCount  = 0;
+    GLsizei m_vertexCount = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Material.cpp`
+
+```cpp
+#include "Material.h"
+
+namespace Renderer {
+
+void Material::bind(const Shader& shader) const {
+
+    // ── Albedo / diffuse map (unit 0) ─────────────────────────────────────────
+    if (diffuseMap) {
+        diffuseMap->bind(0);
+        shader.setInt ("u_material.diffuseMap",  0);
+        shader.setBool("u_material.hasDiffuse",  true);
+    } else {
+        shader.setBool("u_material.hasDiffuse",  false);
+        shader.setVec3("u_material.diffuseColor", diffuseColor);
+    }
+
+    // ── Normal map (unit 1) ───────────────────────────────────────────────────
+    if (normalMap) {
+        normalMap->bind(1);
+        shader.setInt ("u_material.normalMap",  1);
+        shader.setBool("u_material.hasNormal",  true);
+    } else {
+        shader.setBool("u_material.hasNormal",  false);
+    }
+
+    // ── Roughness map (unit 2) ────────────────────────────────────────────────
+    if (roughnessMap) {
+        roughnessMap->bind(2);
+        shader.setInt ("u_material.roughnessMap",  2);
+        shader.setBool("u_material.hasRoughness",  true);
+    } else {
+        shader.setBool("u_material.hasRoughness",  false);
+        shader.setFloat("u_material.roughness",    roughness);
+    }
+
+    // ── Metallic map (unit 3) ─────────────────────────────────────────────────
+    if (metallicMap) {
+        metallicMap->bind(3);
+        shader.setInt ("u_material.metallicMap",  3);
+        shader.setBool("u_material.hasMetallic",  true);
+    } else {
+        shader.setBool("u_material.hasMetallic",  false);
+        shader.setFloat("u_material.metallic",    metallic);
+    }
+
+    // ── AO map (unit 4) ───────────────────────────────────────────────────────
+    if (aoMap) {
+        aoMap->bind(4);
+        shader.setInt ("u_material.aoMap",  4);
+        shader.setBool("u_material.hasAO",  true);
+    } else {
+        shader.setBool("u_material.hasAO",  false);
+    }
+
+    // ── Legacy Blinn-Phong scalars ────────────────────────────────────────────
+    // Still set so the shader can fall back gracefully for non-PBR models.
+    shader.setVec3 ("u_material.specularColor", specularColor);
+    shader.setFloat("u_material.shininess",     shininess);
+}
+
+void Material::unbind() const {
+    if (diffuseMap)   diffuseMap->unbind();
+    if (normalMap)    normalMap->unbind();
+    if (roughnessMap) roughnessMap->unbind();
+    if (metallicMap)  metallicMap->unbind();
+    if (aoMap)        aoMap->unbind();
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Material.h`
+
+```cpp
+#pragma once
+
+#include "Texture.h"
+#include "Shader.h"
+
+#include <glm/glm.hpp>
+#include <memory>
+#include <string>
+
+namespace Renderer {
+
+// A Material describes how a surface looks — which texture maps it has
+// and what scalar properties it carries. It knows how to bind itself
+// to a shader before a draw call.
+//
+// Supports both legacy Blinn-Phong and full PBR (metallic/roughness workflow).
+// The shader selects the right path based on which maps are present.
+//
+// Texture unit convention (fixed — shaders rely on these slots):
+//   unit 0 = albedo/diffuse
+//   unit 1 = normal
+//   unit 2 = roughness
+//   unit 3 = metallic
+//   unit 4 = ambient occlusion (AO)
+class Material {
+public:
+    Material() = default;
+
+    // Bind all available textures to their designated units and set
+    // all uniforms the shader expects. Call before mesh->draw().
+    void bind(const Shader& shader) const;
+    void unbind() const;
+
+    // ── Texture maps ──────────────────────────────────────────────────────────
+    std::shared_ptr<Texture> diffuseMap;    // unit 0 — albedo / base color
+    std::shared_ptr<Texture> normalMap;     // unit 1 — tangent-space normals
+    std::shared_ptr<Texture> roughnessMap;  // unit 2 — perceptual roughness
+    std::shared_ptr<Texture> metallicMap;   // unit 3 — metallic mask
+    std::shared_ptr<Texture> aoMap;         // unit 4 — ambient occlusion
+
+    // ── Scalar fallbacks ──────────────────────────────────────────────────────
+    // Used when the corresponding texture map is absent.
+    glm::vec3 diffuseColor  { 0.8f, 0.8f, 0.8f };
+    float     roughness     { 0.5f };   // 0 = mirror-smooth, 1 = fully rough
+    float     metallic      { 0.0f };   // 0 = dielectric,    1 = metal
+
+    // Legacy Blinn-Phong fallbacks (used when no PBR maps are present)
+    glm::vec3 specularColor { 0.5f, 0.5f, 0.5f };
+    float     shininess     { 32.0f };
+
+    std::string name;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Mesh.cpp`
+
+```cpp
+#include "Mesh.h"
+#include <glad/glad.h>
+
+namespace Renderer {
+
+Mesh::Mesh(const std::vector<Vertex>&   vertices,
+           const std::vector<uint32_t>& indices,
+           std::shared_ptr<Material>    material)
+    : m_material(std::move(material))
+{
+    m_vertexCount = vertices.size();
+    m_indexCount  = indices.size();
+    setupBuffer(vertices, indices);
+}
+
+void Mesh::setupBuffer(const std::vector<Vertex>&   vertices,
+                       const std::vector<uint32_t>& indices)
+{
+    // Memory layout of one Vertex (stride = 56 bytes):
+    //
+    // Offset  0: position  (vec3 = 12 bytes)
+    // Offset 12: texCoord  (vec2 =  8 bytes)
+    // Offset 20: normal    (vec3 = 12 bytes)
+    // Offset 32: tangent   (vec3 = 12 bytes)
+    // Offset 44: bitangent (vec3 = 12 bytes)
+    // Total: 56 bytes
+
+    std::vector<float> flatData;
+    flatData.reserve(vertices.size() * 14); // 14 floats per vertex
+
+    for (const auto& v : vertices) {
+        flatData.push_back(v.position.x);
+        flatData.push_back(v.position.y);
+        flatData.push_back(v.position.z);
+        flatData.push_back(v.texCoord.x);
+        flatData.push_back(v.texCoord.y);
+        flatData.push_back(v.normal.x);
+        flatData.push_back(v.normal.y);
+        flatData.push_back(v.normal.z);
+        flatData.push_back(v.tangent.x);
+        flatData.push_back(v.tangent.y);
+        flatData.push_back(v.tangent.z);
+        flatData.push_back(v.bitangent.x);
+        flatData.push_back(v.bitangent.y);
+        flatData.push_back(v.bitangent.z);
+    }
+
+    // Location binding matches the vertex shader's layout(location = N)
+    std::vector<VertexAttribute> attributes = {
+        { 0,  3,  0 },   // a_position  : vec3 at offset 0
+        { 1,  2, 12 },   // a_texCoord  : vec2 at offset 12
+        { 2,  3, 20 },   // a_normal    : vec3 at offset 20
+        { 3,  3, 32 },   // a_tangent   : vec3 at offset 32
+        { 4,  3, 44 },   // a_bitangent : vec3 at offset 44
+    };
+
+    m_buffer.uploadVertices(flatData, attributes, sizeof(Vertex));
+    m_buffer.uploadIndices(indices);
+}
+
+void Mesh::draw(const Shader& shader) const {
+    if (m_material)
+        m_material->bind(shader);
+
+    m_buffer.bind();
+    glDrawElements(GL_TRIANGLES,
+                   static_cast<GLsizei>(m_indexCount),
+                   GL_UNSIGNED_INT,
+                   0);
+    m_buffer.unbind();
+
+    if (m_material)
+        m_material->unbind();
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Mesh.h`
+
+```cpp
+#pragma once
+
+#include "Buffer.h"
+#include "Shader.h"
+#include "Material.h"
+
+#include <glm/glm.hpp>
+#include <vector>
+#include <memory>
+
+namespace Renderer {
+
+// One vertex — interleaved layout in GPU memory.
+// Tangent and bitangent are included now, computed by Assimp,
+// and will be used in Step 7 for normal mapping.
+struct Vertex {
+    glm::vec3 position;
+    glm::vec2 texCoord;
+    glm::vec3 normal;
+    glm::vec3 tangent;    // points along U direction of the texture
+    glm::vec3 bitangent;  // points along V direction of the texture
+};
+
+// A Mesh is one drawable unit: geometry + material.
+// Assimp may produce many Meshes per model file, one per material group.
+class Mesh {
+public:
+    Mesh(const std::vector<Vertex>&   vertices,
+         const std::vector<uint32_t>& indices,
+         std::shared_ptr<Material>    material);
+
+    Mesh(const Mesh&)            = delete;
+    Mesh& operator=(const Mesh&) = delete;
+    Mesh(Mesh&&)                 = default;
+    Mesh& operator=(Mesh&&)      = default;
+
+    // Binds material, issues draw call. Shader must be bound by caller.
+    void draw(const Shader& shader) const;
+
+    const Material* getMaterial() const { return m_material.get(); }
+    size_t vertexCount() const { return m_vertexCount; }
+    size_t indexCount()  const { return m_indexCount; }
+
+private:
+    void setupBuffer(const std::vector<Vertex>&   vertices,
+                     const std::vector<uint32_t>& indices);
+
+    Buffer                    m_buffer;
+    std::shared_ptr<Material> m_material;
+    size_t m_vertexCount = 0;
+    size_t m_indexCount  = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Model.cpp`
+
+```cpp
+#include "Model.h"
+
+namespace Renderer {
+
+Model::Model(std::vector<std::unique_ptr<Mesh>> meshes)
+    : m_meshes(std::move(meshes))
+{
+    rebuildModelMatrix();
+}
+
+void Model::draw(const Shader& shader) const {
+    shader.setMat4("u_model", m_modelMatrix);
+    for (const auto& mesh : m_meshes)
+        mesh->draw(shader);
+}
+
+void Model::setPosition(const glm::vec3& pos) {
+    m_position = pos;
+    rebuildModelMatrix();
+}
+
+void Model::setRotation(float angleDegrees, const glm::vec3& axis) {
+    m_angleDeg     = angleDegrees;
+    m_rotationAxis = axis;
+    rebuildModelMatrix();
+}
+
+void Model::setScale(const glm::vec3& scale) {
+    m_scale = scale;
+    rebuildModelMatrix();
+}
+
+void Model::setScale(float uniformScale) {
+    m_scale = glm::vec3(uniformScale);
+    rebuildModelMatrix();
+}
+
+void Model::setBaseRotation(float angleDegrees, const glm::vec3& axis) {
+    m_baseRotation = glm::rotate(glm::mat4(1.0f), glm::radians(angleDegrees), axis);
+    rebuildModelMatrix();
+}
+
+void Model::rebuildModelMatrix() {
+    // Correct transform order (applied right-to-left by GPU):
+    //   1. baseRotation — fixes model's rest orientation in model space (innermost)
+    //   2. spin         — rotates around world Y axis
+    //   3. translate    — moves to world position
+    //   4. scale        — uniform scale
+    //
+    // Key insight: baseRotation must be the INNERMOST operation so it always
+    // corrects the model's local axes regardless of the current spin angle.
+    // If it were applied after the spin, its axis would rotate with the model
+    // and produce wrong normals (black patches) at certain orientations.
+    glm::mat4 m = glm::mat4(1.0f);
+    m = glm::translate(m, m_position);
+    m = glm::rotate(m, glm::radians(m_angleDeg), m_rotationAxis);
+    m = glm::scale(m, m_scale);
+    m_modelMatrix = m * m_baseRotation;  // base fix is innermost — model space
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Model.h`
+
+```cpp
+#pragma once
+
+#include "Mesh.h"
+#include "Shader.h"
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <memory>
+#include <string>
+
+namespace Renderer {
+
+// A Model is a collection of Meshes loaded from a single model file.
+// It holds the model-space transform and delegates draw calls to its meshes.
+//
+// Assimp may split one model file into many meshes (one per material).
+// Model reunites them under one object you can place in a scene.
+class Model {
+public:
+    explicit Model(std::vector<std::unique_ptr<Mesh>> meshes);
+
+    // Draw all meshes with the given shader.
+    // Sets u_model uniform before drawing.
+    void draw(const Shader& shader) const;
+
+    // ── Transform API ─────────────────────────────────────────────────────────
+    void setPosition(const glm::vec3& pos);
+    void setRotation(float angleDegrees, const glm::vec3& axis);
+    void setScale   (const glm::vec3& scale);
+    void setScale   (float uniformScale);
+
+    // Fix-up rotation applied before the spin — use this to correct a model's
+    // rest orientation (e.g. an FBX exported on its side from Blender).
+    // setRotation() / the per-frame spin are applied on top of this.
+    void setBaseRotation(float angleDegrees, const glm::vec3& axis);
+
+    const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
+
+    size_t meshCount() const { return m_meshes.size(); }
+
+private:
+    void rebuildModelMatrix();
+
+    std::vector<std::unique_ptr<Mesh>> m_meshes;
+
+    glm::vec3 m_position    { 0.0f };
+    glm::vec3 m_scale       { 1.0f };
+    float     m_angleDeg    { 0.0f };
+    glm::vec3 m_rotationAxis{ 0.0f, 1.0f, 0.0f };
+    glm::mat4 m_baseRotation{ 1.0f };  // orientation fix, identity by default
+
+    glm::mat4 m_modelMatrix { 1.0f };
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Shader.cpp`
+
+```cpp
+#include "Shader.h"
+
+#include <fstream>
+#include <glm/gtc/type_ptr.hpp>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+
+namespace Renderer
+{
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Construction / Destruction
+// ─────────────────────────────────────────────────────────────────────────────
+Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
+{
+    std::string vertSource = readFile(vertexPath);
+    std::string fragSource = readFile(fragmentPath);
+
+    GLuint vertShader = compileShader(GL_VERTEX_SHADER, vertSource);
+    GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragSource);
+
+    // Link both compiled stages into a program
+    m_glShaderProgramID = glCreateProgram();
+    glAttachShader(m_glShaderProgramID, vertShader);
+    glAttachShader(m_glShaderProgramID, fragShader);
+    glLinkProgram(m_glShaderProgramID);
+    checkLinkErrors(m_glShaderProgramID);
+
+    // Compiled stages are now baked into the program — release them
+    glDeleteShader(vertShader);
+    glDeleteShader(fragShader);
+
+    std::cout << "[Shader] Linked program " << m_glShaderProgramID << " (" << vertexPath << ", "
+              << fragmentPath << ")\n";
+}
+
+Shader::~Shader()
+{
+    if (m_glShaderProgramID)
+        glDeleteProgram(m_glShaderProgramID);
+}
+
+Shader::Shader(Shader&& other) noexcept : m_glShaderProgramID(other.m_glShaderProgramID)
+{
+    other.m_glShaderProgramID = 0; // transfer ownership, invalidate source
+}
+
+Shader& Shader::operator=(Shader&& other) noexcept
+{
+    if (this != &other)
+    {
+        if (m_glShaderProgramID)
+            glDeleteProgram(m_glShaderProgramID);
+        m_glShaderProgramID       = other.m_glShaderProgramID;
+        other.m_glShaderProgramID = 0;
+    }
+    return *this;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bind / Unbind
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Shader::bind() const
+{
+    glUseProgram(m_glShaderProgramID);
+}
+void Shader::unbind() const
+{
+    glUseProgram(0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Uniform Setters
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Shader::setBool(const std::string& name, bool value) const
+{
+    glUniform1i(getUniformLocation(name), static_cast<int>(value));
+}
+
+void Shader::setInt(const std::string& name, int value) const
+{
+    glUniform1i(getUniformLocation(name), value);
+}
+
+void Shader::setFloat(const std::string& name, float value) const
+{
+    glUniform1f(getUniformLocation(name), value);
+}
+
+void Shader::setVec2(const std::string& name, const glm::vec2& value) const
+{
+    glUniform2fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setVec3(const std::string& name, const glm::vec3& value) const
+{
+    glUniform3fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setVec4(const std::string& name, const glm::vec4& value) const
+{
+    glUniform4fv(getUniformLocation(name), 1, glm::value_ptr(value));
+}
+
+void Shader::setMat3(const std::string& name, const glm::mat3& value) const
+{
+    // GL_FALSE: GLM is already column-major, matching OpenGL's expectation
+    glUniformMatrix3fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::setMat4(const std::string& name, const glm::mat4& value) const
+{
+    glUniformMatrix4fv(getUniformLocation(name), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Private Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::string Shader::readFile(const std::string& path)
+{
+    std::ifstream file(path);
+    if (!file.is_open())
+        throw std::runtime_error("[Shader] Cannot open file: " + path);
+
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    return ss.str();
+}
+
+GLuint Shader::compileShader(GLenum type, const std::string& source)
+{
+    GLuint      shader = glCreateShader(type);
+    const char* src    = source.c_str();
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+
+    std::string label = (type == GL_VERTEX_SHADER) ? "VERTEX" : "FRAGMENT";
+    checkCompileErrors(shader, label);
+
+    return shader;
+}
+
+void Shader::checkCompileErrors(GLuint shader, const std::string& label)
+{
+    GLint success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        GLchar log[1024];
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        throw std::runtime_error("[Shader] " + label + " compilation failed:\n" + log);
+    }
+}
+
+void Shader::checkLinkErrors(GLuint program)
+{
+    GLint success;
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        GLchar log[1024];
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        throw std::runtime_error(std::string("[Shader] Program linking failed:\n") + log);
+    }
+}
+
+GLint Shader::getUniformLocation(const std::string& name) const
+{
+    // glGetUniformLocation is a driver call — doing it every frame for every
+    // uniform is wasteful. A proper cache would store results in an
+    // unordered_map<string, GLint>. We keep it simple for now and will
+    // add the cache in the ResourceManager step.
+    GLint location = glGetUniformLocation(m_glShaderProgramID, name.c_str());
+    if (location == -1)
+        std::cerr << "[Shader] Warning: uniform '" << name << "' not found\n";
+    return location;
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Shader.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+#include <glm/glm.hpp>
+#include <string>
+
+namespace Renderer
+{
+
+/**
+ * @class Shader
+ * @brief RAII wrapper around an OpenGL shader program.
+ * 
+ * Responsible for:
+ *  - Reading GLSL files from disk
+ *  - Compiling vertex and fragment shaders
+ *  - Linking them into a program
+ *  - Providing uniform setters
+ *
+ * Ownership:
+ *  - Owns one OpenGL program (GLuint)
+ *  - Non-copyable
+ *  - Movable
+ *
+ * Throws std::runtime_error if compilation or linking fails.
+ */
+class Shader
+{
+  public:
+    /**
+     * @brief Constructs and links a shader program from two GLSL files.
+     *
+     * @param vertexPath Path to vertex shader file.
+     * @param fragmentPath Path to fragment shader file.
+     *
+     * @throws std::runtime_error if file reading, compilation, or linking fails.
+     */
+    Shader(const std::string& vertexPath, const std::string& fragmentPath);
+
+    ~Shader();
+
+    Shader(const Shader&)            = delete;
+    Shader& operator=(const Shader&) = delete;
+
+    Shader(Shader&& other) noexcept;
+    Shader& operator=(Shader&& other) noexcept;
+
+    /**
+     * @brief Activates this shader program.
+     */
+    void bind() const;
+
+    /**
+     * @brief Deactivates any active shader program.
+     */
+    void unbind() const;
+
+    /**
+     * @return OpenGL program ID.
+     */
+    GLuint getID() const
+    {
+        return m_glShaderProgramID;
+    }
+
+    /// Uniform setters
+    void setBool(const std::string& name, bool value) const;
+    void setInt(const std::string& name, int value) const;
+    void setFloat(const std::string& name, float value) const;
+    void setVec2(const std::string& name, const glm::vec2& value) const;
+    void setVec3(const std::string& name, const glm::vec3& value) const;
+    void setVec4(const std::string& name, const glm::vec4& value) const;
+    void setMat3(const std::string& name, const glm::mat3& value) const;
+    void setMat4(const std::string& name, const glm::mat4& value) const;
+
+  private:
+    GLuint m_glShaderProgramID = 0;
+
+    static std::string readFile(const std::string& path);
+    static GLuint      compileShader(GLenum type, const std::string& source);
+    static void        checkCompileErrors(GLuint shader, const std::string& label);
+    static void        checkLinkErrors(GLuint program);
+
+    /**
+     * @brief Retrieves uniform location.
+     *
+     * @warning This performs a driver call. Consider caching for performance.
+     */
+    GLint getUniformLocation(const std::string& name) const;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/ShadowMap.cpp`
+
+```cpp
+#include "ShadowMap.h"
+
+#include <stdexcept>
+
+namespace Renderer {
+
+ShadowMap::ShadowMap() {
+
+    // ── Depth texture ─────────────────────────────────────────────────────────
+    // GL_DEPTH_COMPONENT24: 24-bit depth precision — matches typical hardware.
+    // We store only depth, no colour.
+    glGenTextures(1, &m_depthTexture);
+    glBindTexture(GL_TEXTURE_2D, m_depthTexture);
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_DEPTH_COMPONENT24,  // internal format: 24-bit depth
+                 WIDTH, HEIGHT,
+                 0,
+                 GL_DEPTH_COMPONENT,    // data format
+                 GL_FLOAT,              // data type
+                 nullptr);              // no CPU data — GPU will fill it
+
+    // Nearest filtering: for depth comparison we want exact texel values,
+    // not interpolated ones. Linear filtering on depth makes PCF look odd.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Clamp to border with depth 1.0 (maximum depth = fully lit).
+    // Without this, UVs outside [0,1] — i.e. fragments outside the light
+    // frustum — would repeat the shadow map edge and appear incorrectly shadowed.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ── Framebuffer ───────────────────────────────────────────────────────────
+    glGenFramebuffers(1, &m_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+
+    // Attach our depth texture as the depth buffer.
+    // No colour attachment — this is a depth-only FBO.
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_DEPTH_ATTACHMENT,
+                           GL_TEXTURE_2D,
+                           m_depthTexture,
+                           0); // mip level 0
+
+    // Tell OpenGL explicitly: no colour reads or writes.
+    // Required — without this the FBO is incomplete on some drivers.
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        throw std::runtime_error("[ShadowMap] Framebuffer incomplete");
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+ShadowMap::~ShadowMap() {
+    if (m_fbo)          glDeleteFramebuffers(1, &m_fbo);
+    if (m_depthTexture) glDeleteTextures(1, &m_depthTexture);
+}
+
+void ShadowMap::bindForWriting() const {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glClear(GL_DEPTH_BUFFER_BIT);  // clear last frame's depth data
+}
+
+void ShadowMap::unbindWriting() const {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void ShadowMap::bindTextureToUnit(GLuint unit) const {
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, m_depthTexture);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/ShadowMap.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+
+namespace Renderer {
+
+// ShadowMap owns a framebuffer with a single depth texture attachment.
+// Usage each frame:
+//
+//   1. shadowMap.bindForWriting();          // shadow pass: render scene depth
+//      glViewport(0, 0, SHADOW_W, SHADOW_H);
+//      // ... draw all shadow-casting geometry with shadow shader ...
+//
+//   2. shadowMap.bindTextureToUnit(5);       // main pass: sample the depth texture
+//      shader.setInt("u_shadowMap", 5);
+//
+// Resolution: higher = sharper shadows, more VRAM.
+// 2048x2048 is a good default for medium-range scenes.
+
+class ShadowMap {
+public:
+    static constexpr int WIDTH  = 2048;
+    static constexpr int HEIGHT = 2048;
+
+    ShadowMap();
+    ~ShadowMap();
+
+    ShadowMap(const ShadowMap&)            = delete;
+    ShadowMap& operator=(const ShadowMap&) = delete;
+
+    // Bind the shadow FBO for the depth-write pass.
+    // Call glViewport(0,0,WIDTH,HEIGHT) after this.
+    void bindForWriting() const;
+
+    // Restore the default framebuffer after the shadow pass.
+    // Call glViewport(0,0,screenW,screenH) after this.
+    void unbindWriting() const;
+
+    // Bind the depth texture to a specific texture unit for sampling
+    // in the main lighting shader.
+    void bindTextureToUnit(GLuint unit) const;
+
+    GLuint getDepthTexture() const { return m_depthTexture; }
+
+private:
+    GLuint m_fbo          = 0;
+    GLuint m_depthTexture = 0;
+};
+
+} // namespace Renderer
+```
+
+### `src/renderer/Texture.cpp`
+
+```cpp
+#include "Texture.h"
+
+// STB_IMAGE_IMPLEMENTATION must be defined in exactly one .cpp file.
+// This tells the header to include the full function definitions here.
+// Every other file that needs stb_image just includes the header without
+// the define — otherwise you'd get duplicate symbol linker errors.
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+#include <iostream>
+#include <stdexcept>
+
+namespace Renderer {
+
+Texture::Texture(const std::string& path) : m_path(path) {
+
+    // stb_image loads images with (0,0) at the top-left.
+    // OpenGL expects (0,0) at the bottom-left.
+    // This one call flips all images on load so UVs work correctly.
+    stbi_set_flip_vertically_on_load(true);
+
+    // Decode the image preserving its original channel count.
+    // Forcing 4 channels (RGBA) on everything corrupts single-channel maps
+    // (roughness, AO) and can shift the blue channel of normal maps.
+    // We pass 0 so stb_image returns exactly what's in the file, then
+    // pick the matching GL format below.
+    unsigned char* data = stbi_load(path.c_str(),
+                                    &m_width, &m_height, &m_channels, 0);
+    if (!data) {
+        throw std::runtime_error("[Texture] Failed to load: " + path +
+                                 "\n  Reason: " + stbi_failure_reason());
+    }
+
+    std::cout << "[Texture] Loaded: " << path
+              << " (" << m_width << "x" << m_height
+              << ", " << m_channels << " channels)\n";
+
+    // Choose GL format based on actual channel count.
+    // internalFormat = how the GPU stores it.
+    // dataFormat     = how the CPU-side bytes are laid out.
+    GLenum internalFormat, dataFormat;
+    switch (m_channels) {
+        case 1:  internalFormat = GL_R8;    dataFormat = GL_RED;  break;
+        case 2:  internalFormat = GL_RG8;   dataFormat = GL_RG;   break;
+        case 3:  internalFormat = GL_RGB8;  dataFormat = GL_RGB;  break;
+        case 4:  internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+        default: internalFormat = GL_RGBA8; dataFormat = GL_RGBA; break;
+    }
+
+    // ── Generate GPU texture object ───────────────────────────────────────────
+    glGenTextures(1, &m_textureID);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+
+    // For single-channel textures (roughness, AO, metallic) the default swizzle
+    // reads R into R only, leaving G/B as 0. We want to sample it as .r in GLSL
+    // which works fine — but set swizzle so all channels read from R, making
+    // texture().rgb work correctly too if ever needed.
+    if (m_channels == 1) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    }
+
+    // ── Wrapping mode ─────────────────────────────────────────────────────────
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    // ── Filtering mode ────────────────────────────────────────────────────────
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // ── Upload pixel data to GPU ──────────────────────────────────────────────
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 internalFormat,
+                 m_width, m_height,
+                 0,
+                 dataFormat,
+                 GL_UNSIGNED_BYTE,
+                 data);
+
+    // ── Generate mipmap chain ─────────────────────────────────────────────────
+    // Automatically creates 512x512, 256x256, 128x128... down to 1x1.
+    // Must be called AFTER glTexImage2D so the base level exists.
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    // ── Free CPU memory ───────────────────────────────────────────────────────
+    // GPU now has its own copy. The CPU-side bytes are no longer needed.
+    stbi_image_free(data);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+Texture::~Texture() {
+    if (m_textureID)
+        glDeleteTextures(1, &m_textureID);
+}
+
+Texture::Texture(Texture&& other) noexcept
+    : m_textureID(other.m_textureID),
+      m_width(other.m_width),
+      m_height(other.m_height),
+      m_channels(other.m_channels),
+      m_path(std::move(other.m_path))
+{
+    other.m_textureID = 0;
+}
+
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this != &other) {
+        if (m_textureID) glDeleteTextures(1, &m_textureID);
+        m_textureID       = other.m_textureID;
+        m_width           = other.m_width;
+        m_height          = other.m_height;
+        m_channels        = other.m_channels;
+        m_path            = std::move(other.m_path);
+        other.m_textureID = 0;
+    }
+    return *this;
+}
+
+void Texture::bind(GLuint unit) const {
+    // Activate the texture unit slot first, then bind our texture to it.
+    // GL_TEXTURE0 + 1 = GL_TEXTURE1, + 2 = GL_TEXTURE2, etc.
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+}
+
+void Texture::unbind() const {
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+} // namespace Renderer
+```
+
+### `src/renderer/Texture.h`
+
+```cpp
+#pragma once
+
+#include <glad/glad.h>
+#include <string>
+
+namespace Renderer {
+
+class Texture {
+public:
+    // Load an image from disk and upload to GPU.
+    // Throws std::runtime_error if the file cannot be loaded.
+    explicit Texture(const std::string& path);
+    ~Texture();
+
+    // Non-copyable — owns a GPU texture handle
+    Texture(const Texture&)            = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    // Movable
+    Texture(Texture&& other) noexcept;
+    Texture& operator=(Texture&& other) noexcept;
+
+    // Bind this texture to a specific texture unit slot.
+    // unit=0 → GL_TEXTURE0, unit=1 → GL_TEXTURE1, etc.
+    // Call this before the draw call that needs this texture.
+    void bind(GLuint unit = 0) const;
+    void unbind() const;
+
+    GLuint      getID()     const { return m_textureID; }
+    int         getWidth()  const { return m_width; }
+    int         getHeight() const { return m_height; }
+    const std::string& getPath() const { return m_path; }
+
+private:
+    GLuint      m_textureID = 0;
+    int         m_width     = 0;
+    int         m_height    = 0;
+    int         m_channels  = 0;
+    std::string m_path;
+};
+
+} // namespace Renderer
+```
+
+### `src/scene/AssimpLoader.cpp`
+
+```cpp
+#include "AssimpLoader.h"
+
+#include "renderer/Material.h"
+
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+
+#include <filesystem>
+#include <algorithm>
+#include <iostream>
+#include <stdexcept>
+
+namespace fs = std::filesystem;
+
+namespace Scene {
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  load — entry point
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::unique_ptr<Renderer::Model>
+AssimpLoader::load(const std::string& path)
+{
+    Assimp::Importer importer;
+
+    // Post-processing flags tell Assimp what to do while loading:
+    const unsigned int flags =
+        aiProcess_Triangulate           // convert quads/ngons to triangles
+      | aiProcess_FlipUVs               // flip V: OBJ has (0,0) bottom-left,
+                                        //         OpenGL expects top-left
+      | aiProcess_GenSmoothNormals      // generate normals if missing
+      | aiProcess_CalcTangentSpace      // compute tangent + bitangent per vertex
+                                        // needed for normal mapping in Step 7
+      | aiProcess_JoinIdenticalVertices // deduplicate shared vertices (index buffer)
+      | aiProcess_ValidateDataStructure;// catch malformed files early
+
+    const aiScene* scene = importer.ReadFile(path, flags);
+
+    // Validate — Assimp returns nullptr or sets the incomplete flag on failure
+    if (!scene || !scene->mRootNode ||
+        (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE))
+    {
+        throw std::runtime_error(
+            "[AssimpLoader] Failed to load: " + path +
+            "\n  " + importer.GetErrorString()
+        );
+    }
+
+    std::cout << "[AssimpLoader] Loading: " << path << "\n"
+              << "  Meshes:    " << scene->mNumMeshes    << "\n"
+              << "  Materials: " << scene->mNumMaterials << "\n"
+              << "  Textures:  " << scene->mNumTextures  << "\n";
+
+    // Resolve directory for relative texture paths
+    std::string modelDir = ".";
+    size_t lastSlash = path.find_last_of("/\\");
+    if (lastSlash != std::string::npos)
+        modelDir = path.substr(0, lastSlash);
+
+    // Texture cache — shared across all meshes in this model.
+    // If the cottage wall and roof both reference the same diffuse PNG,
+    // it's loaded once and both Mesh objects share the same Texture via shared_ptr.
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>> textureCache;
+
+    // Assimp gives a scene graph (tree of nodes). We flatten it into a list
+    // of meshes — for static models this is always correct. Skeletal animation
+    // would need to preserve the hierarchy, but that's out of scope.
+    std::vector<std::unique_ptr<Renderer::Mesh>> meshes;
+
+    // Iterate all meshes in the scene (Assimp stores them in a flat array,
+    // nodes reference them by index)
+    for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+        auto mesh = processMesh(scene->mMeshes[i], scene, modelDir, textureCache);
+        if (mesh) meshes.push_back(std::move(mesh));
+    }
+
+    std::cout << "[AssimpLoader] Done. " << meshes.size() << " mesh(es).\n";
+    return std::make_unique<Renderer::Model>(std::move(meshes));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  processMesh — convert one aiMesh → our Mesh
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::unique_ptr<Renderer::Mesh>
+AssimpLoader::processMesh(
+    const aiMesh*  aiMesh,
+    const aiScene* scene,
+    const std::string& modelDir,
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache)
+{
+    std::vector<Renderer::Vertex>  vertices;
+    std::vector<uint32_t>          indices;
+
+    vertices.reserve(aiMesh->mNumVertices);
+
+    // ── Vertices ──────────────────────────────────────────────────────────────
+    for (unsigned int i = 0; i < aiMesh->mNumVertices; ++i) {
+        Renderer::Vertex v;
+
+        // Position — always present
+        v.position = {
+            aiMesh->mVertices[i].x,
+            aiMesh->mVertices[i].y,
+            aiMesh->mVertices[i].z
+        };
+
+        // Normals — present if aiProcess_GenSmoothNormals was set
+        if (aiMesh->HasNormals()) {
+            v.normal = {
+                aiMesh->mNormals[i].x,
+                aiMesh->mNormals[i].y,
+                aiMesh->mNormals[i].z
+            };
+        }
+
+        // UV coordinates — Assimp supports 8 UV channels.
+        // We always use channel 0 (the primary UV map).
+        if (aiMesh->mTextureCoords[0]) {
+            v.texCoord = {
+                aiMesh->mTextureCoords[0][i].x,
+                aiMesh->mTextureCoords[0][i].y
+            };
+        }
+
+        // Tangent + Bitangent — computed by aiProcess_CalcTangentSpace.
+        // These form the TBN matrix used in Step 7 for normal mapping.
+        if (aiMesh->HasTangentsAndBitangents()) {
+            v.tangent = {
+                aiMesh->mTangents[i].x,
+                aiMesh->mTangents[i].y,
+                aiMesh->mTangents[i].z
+            };
+            v.bitangent = {
+                aiMesh->mBitangents[i].x,
+                aiMesh->mBitangents[i].y,
+                aiMesh->mBitangents[i].z
+            };
+        }
+
+        vertices.push_back(v);
+    }
+
+    // ── Indices ───────────────────────────────────────────────────────────────
+    // Assimp gives faces (triangles after aiProcess_Triangulate).
+    // Each face has exactly 3 indices.
+    indices.reserve(aiMesh->mNumFaces * 3);
+    for (unsigned int i = 0; i < aiMesh->mNumFaces; ++i) {
+        const aiFace& face = aiMesh->mFaces[i];
+        for (unsigned int j = 0; j < face.mNumIndices; ++j)
+            indices.push_back(face.mIndices[j]);
+    }
+
+    // ── Material ──────────────────────────────────────────────────────────────
+    std::shared_ptr<Renderer::Material> material;
+    if (aiMesh->mMaterialIndex >= 0) {
+        const aiMaterial* aiMat = scene->mMaterials[aiMesh->mMaterialIndex];
+        material = processMaterial(aiMat, modelDir, textureCache);
+    }
+
+    std::cout << "[AssimpLoader]   Mesh '" << aiMesh->mName.C_Str() << "': "
+              << vertices.size() << " verts, "
+              << indices.size()  << " indices"
+              << (material && material->diffuseMap ? " [diffuse]" : "")
+              << (material && material->normalMap  ? " [normal]"  : "")
+              << "\n";
+
+    return std::make_unique<Renderer::Mesh>(vertices, indices, material);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  processMaterial — convert aiMaterial → our Material
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::shared_ptr<Renderer::Material>
+AssimpLoader::processMaterial(
+    const aiMaterial* aiMat,
+    const std::string& modelDir,
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache)
+{
+    auto material = std::make_shared<Renderer::Material>();
+
+    // Material name (for debugging)
+    aiString name;
+    aiMat->Get(AI_MATKEY_NAME, name);
+    material->name = name.C_Str();
+
+    // ── Diffuse / albedo map ──────────────────────────────────────────────────
+    // Try Assimp's typed slot first; fall back to filename keyword scan.
+    // FBX exporters frequently don't fill typed slots even when the texture
+    // file is sitting right next to the model.
+    material->diffuseMap = loadTexture(aiMat, aiTextureType_DIFFUSE,
+                                       modelDir, textureCache);
+    if (!material->diffuseMap)
+        material->diffuseMap = findTextureByKeyword(modelDir,
+            {"albedo", "diffuse", "basecolor", "base_color", "color"}, textureCache);
+
+    // ── Normal map ────────────────────────────────────────────────────────────
+    material->normalMap = loadTexture(aiMat, aiTextureType_NORMALS,
+                                      modelDir, textureCache);
+    if (!material->normalMap)
+        material->normalMap = loadTexture(aiMat, aiTextureType_HEIGHT,
+                                          modelDir, textureCache);
+    if (!material->normalMap)
+        material->normalMap = findTextureByKeyword(modelDir,
+            {"normal", "nrm", "nrml", "nor"}, textureCache);
+
+    // ── Roughness map ─────────────────────────────────────────────────────────
+    material->roughnessMap = loadTexture(aiMat, aiTextureType_DIFFUSE_ROUGHNESS,
+                                         modelDir, textureCache);
+    if (!material->roughnessMap)
+        material->roughnessMap = loadTexture(aiMat, aiTextureType_SHININESS,
+                                             modelDir, textureCache);
+    if (!material->roughnessMap)
+        material->roughnessMap = findTextureByKeyword(modelDir,
+            {"roughness", "rough", "rgh"}, textureCache);
+
+    // ── Metallic map ──────────────────────────────────────────────────────────
+    material->metallicMap = loadTexture(aiMat, aiTextureType_METALNESS,
+                                        modelDir, textureCache);
+    if (!material->metallicMap)
+        material->metallicMap = findTextureByKeyword(modelDir,
+            {"metallic", "metalness", "metal"}, textureCache);
+
+    // ── AO map ────────────────────────────────────────────────────────────────
+    material->aoMap = loadTexture(aiMat, aiTextureType_AMBIENT_OCCLUSION,
+                                  modelDir, textureCache);
+    if (!material->aoMap)
+        material->aoMap = loadTexture(aiMat, aiTextureType_LIGHTMAP,
+                                      modelDir, textureCache);
+    if (!material->aoMap)
+        material->aoMap = findTextureByKeyword(modelDir,
+            {"ao", "ambientocclusion", "ambient_occlusion", "occlusion"}, textureCache);
+
+    // ── Scalar properties ─────────────────────────────────────────────────────
+    aiColor3D color;
+    if (aiMat->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
+        material->diffuseColor = { color.r, color.g, color.b };
+
+    if (aiMat->Get(AI_MATKEY_COLOR_SPECULAR, color) == AI_SUCCESS)
+        material->specularColor = { color.r, color.g, color.b };
+
+    float shininess = 32.0f;
+    if (aiMat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS)
+        material->shininess = shininess;
+
+    return material;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  loadTexture — load one texture map from an aiMaterial
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::shared_ptr<Renderer::Texture>
+AssimpLoader::loadTexture(
+    const aiMaterial* material,
+    aiTextureType     type,
+    const std::string& modelDir,
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache)
+{
+    // Check if this material has a texture of the requested type
+    if (material->GetTextureCount(type) == 0)
+        return nullptr;
+
+    aiString texPath;
+    material->GetTexture(type, 0, &texPath); // index 0 = first texture of this type
+
+    // ── Sanitize path ─────────────────────────────────────────────────────────
+    // MTL files exported from Windows often embed a subdirectory prefix using
+    // backslashes (e.g. "tEXTURE\BOdy Skin Base Color.png"). On macOS/Linux
+    // the backslash is not a directory separator so the full string is treated
+    // as a literal filename — which of course doesn't exist.
+    //
+    // Fix: convert all backslashes to forward slashes, then strip everything
+    // up to (and including) the last slash, keeping only the bare filename.
+    // Then resolve that filename relative to the directory the model lives in.
+    std::string rawPath = texPath.C_Str();
+    std::replace(rawPath.begin(), rawPath.end(), '\\', '/');
+    std::string filename = fs::path(rawPath).filename().string();
+    std::string fullPath = modelDir + "/" + filename;
+
+    // Cache lookup — return existing texture if already loaded
+    auto it = textureCache.find(fullPath);
+    if (it != textureCache.end())
+        return it->second;
+
+    // ── Exact load ────────────────────────────────────────────────────────────
+    if (fs::exists(fullPath)) {
+        try {
+            auto tex = std::make_shared<Renderer::Texture>(fullPath);
+            textureCache[fullPath] = tex;
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+            return nullptr;
+        }
+    }
+
+    // ── Case-insensitive fallback ─────────────────────────────────────────────
+    // Some exporters mangle capitalisation (e.g. "FACE Base Color.png" in the
+    // MTL vs "FACE Base Color apha.png" on disk). Scan the model directory for
+    // any file whose name matches case-insensitively.
+    std::string lowerTarget = filename;
+    std::transform(lowerTarget.begin(), lowerTarget.end(),
+                   lowerTarget.begin(), ::tolower);
+
+    std::string bestMatch;
+    try {
+        for (const auto& entry : fs::directory_iterator(modelDir)) {
+            if (!entry.is_regular_file()) continue;
+            std::string candidate = entry.path().filename().string();
+            std::string lowerCandidate = candidate;
+            std::transform(lowerCandidate.begin(), lowerCandidate.end(),
+                           lowerCandidate.begin(), ::tolower);
+            if (lowerCandidate == lowerTarget) {
+                bestMatch = entry.path().string();
+                break;
+            }
+        }
+    } catch (...) {}
+
+    if (!bestMatch.empty()) {
+        std::cout << "[AssimpLoader] Note: resolved '" << filename
+                  << "' → '" << fs::path(bestMatch).filename().string()
+                  << "' (case-insensitive match)\n";
+        try {
+            auto tex = std::make_shared<Renderer::Texture>(bestMatch);
+            textureCache[fullPath] = tex;  // cache under the original key
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+            return nullptr;
+        }
+    }
+
+    std::cerr << "[AssimpLoader] Warning: texture not found: " << fullPath << "\n";
+    return nullptr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  findTextureByKeyword — keyword-based directory scan fallback
+// ─────────────────────────────────────────────────────────────────────────────
+// FBX exporters frequently store textures in non-standard Assimp slots, or
+// don't store them at all — the artist just named the files "Blob_roughness.jpg"
+// and expected the engine to find them. This function scans the model directory
+// for a file whose lowercase name contains any of the given keywords.
+//
+// Keywords are tried in order; first match wins. Example call:
+//   findTextureByKeyword(dir, {"roughness", "rough"}, cache)
+//
+std::shared_ptr<Renderer::Texture>
+AssimpLoader::findTextureByKeyword(
+    const std::string& modelDir,
+    const std::vector<std::string>& keywords,
+    std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache)
+{
+    // Collect all files in the directory once, lowercase their names.
+    std::vector<std::pair<std::string, std::string>> entries; // (fullPath, lowerName)
+    try {
+        for (const auto& entry : fs::directory_iterator(modelDir)) {
+            if (!entry.is_regular_file()) continue;
+            std::string name = entry.path().filename().string();
+            std::string lower = name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            entries.emplace_back(entry.path().string(), lower);
+        }
+    } catch (...) { return nullptr; }
+
+    // Try each keyword in priority order.
+    for (const auto& kw : keywords) {
+        for (const auto& [fullPath, lowerName] : entries) {
+            if (lowerName.find(kw) != std::string::npos) {
+                // Cache check
+                auto it = textureCache.find(fullPath);
+                if (it != textureCache.end()) return it->second;
+
+                try {
+                    std::cout << "[AssimpLoader] Keyword match: '"
+                              << fs::path(fullPath).filename().string()
+                              << "' (keyword: '" << kw << "')\n";
+                    auto tex = std::make_shared<Renderer::Texture>(fullPath);
+                    textureCache[fullPath] = tex;
+                    return tex;
+                } catch (const std::exception& e) {
+                    std::cerr << "[AssimpLoader] Warning: " << e.what() << "\n";
+                    return nullptr;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+} // namespace Scene
+```
+
+### `src/scene/AssimpLoader.h`
+
+```cpp
+#pragma once
+
+#include "renderer/Model.h"
+#include "renderer/Texture.h"
+
+#include <assimp/scene.h>
+
+#include <string>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
+namespace Scene {
+
+class AssimpLoader {
+public:
+    // Load a model file (OBJ, FBX, GLTF, DAE, ...) and return a Model.
+    // Throws std::runtime_error if the file cannot be loaded.
+    static std::unique_ptr<Renderer::Model> load(const std::string& path);
+
+private:
+    // Process one Assimp mesh node → our Mesh
+    static std::unique_ptr<Renderer::Mesh> processMesh(
+        const aiMesh*  mesh,
+        const aiScene* scene,
+        const std::string& modelDir,
+        std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
+    );
+
+    // Build a Material from an Assimp material
+    static std::shared_ptr<Renderer::Material> processMaterial(
+        const aiMaterial* material,
+        const std::string& modelDir,
+        std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
+    );
+
+    // Load a texture of the given type from an Assimp material,
+    // returning nullptr if that map doesn't exist.
+    // Uses textureCache to avoid loading the same image twice.
+    static std::shared_ptr<Renderer::Texture> loadTexture(
+        const aiMaterial* material,
+        aiTextureType     type,
+        const std::string& modelDir,
+        std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
+    );
+
+    // Fallback: scan the model directory for a file whose lowercase name
+    // contains any of the given keywords (e.g. {"rough","roughness"}).
+    // FBX exporters often embed texture paths in non-standard Assimp slots,
+    // so typed lookups fail even when the file is sitting right next to the model.
+    static std::shared_ptr<Renderer::Texture> findTextureByKeyword(
+        const std::string& modelDir,
+        const std::vector<std::string>& keywords,
+        std::unordered_map<std::string, std::shared_ptr<Renderer::Texture>>& textureCache
+    );
+};
+
+} // namespace Scene
+```
+
+### `src/main.cpp`
+
+```cpp
+#include "core/Application.h"
+#include "renderer/Shader.h"
+#include "renderer/Model.h"
+#include "renderer/Buffer.h"
+#include "renderer/ShadowMap.h"
+#include "scene/AssimpLoader.h"
+
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+class CottageApp : public Core::Application {
+protected:
+
+    void onInit() override {
+        glEnable(GL_DEPTH_TEST);
+
+        // ── Shaders ───────────────────────────────────────────────────────────
+        m_shader = std::make_unique<Renderer::Shader>(
+            "../assets/shaders/basic.vert",
+            "../assets/shaders/basic.frag"
+        );
+        m_unlitShader = std::make_unique<Renderer::Shader>(
+            "../assets/shaders/unlit.vert",
+            "../assets/shaders/unlit.frag"
+        );
+        m_shadowShader = std::make_unique<Renderer::Shader>(
+            "../assets/shaders/shadow.vert",
+            "../assets/shaders/shadow.frag"
+        );
+
+        // ── Shadow map ────────────────────────────────────────────────────────
+        m_shadowMap = std::make_unique<Renderer::ShadowMap>();
+
+        // ── Load model ────────────────────────────────────────────────────────
+        m_model = Scene::AssimpLoader::load("../models/cottage/cottage_obj.obj");
+
+        // ── Light cube geometry ───────────────────────────────────────────────
+        std::vector<float> cubeVerts = {
+            -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f,
+            -0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
+        };
+        std::vector<uint32_t> cubeIdx = {
+            0,1,2, 0,2,3,
+            4,5,6, 4,6,7,
+            0,4,7, 0,7,3,
+            1,5,6, 1,6,2,
+            3,2,6, 3,6,7,
+            0,1,5, 0,5,4,
+        };
+        std::vector<Renderer::VertexAttribute> cubeAttribs = {{ 0, 3, 0 }};
+        m_lightCubeBuffer = std::make_unique<Renderer::Buffer>();
+        m_lightCubeBuffer->uploadVertices(cubeVerts, cubeAttribs, 3 * sizeof(float));
+        m_lightCubeBuffer->uploadIndices(cubeIdx);
+
+        // ── Camera ────────────────────────────────────────────────────────────
+        m_cameraPos = glm::vec3(0.0f, 3.0f, 8.0f);
+        m_view = glm::lookAt(
+            m_cameraPos,
+            glm::vec3(0.0f, 1.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+        float aspect = static_cast<float>(m_window->getWidth()) /
+                       static_cast<float>(m_window->getHeight());
+        m_projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+    }
+
+    void onUpdate(float deltaTime) override {
+        if (isKeyPressed(GLFW_KEY_ESCAPE))
+            glfwSetWindowShouldClose(m_window->getNativeWindow(), true);
+
+        m_rotation += 20.0f * deltaTime;
+        m_model->setRotation(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // Orbit light
+        m_lightAngle += 60.0f * deltaTime;
+        float rad = glm::radians(m_lightAngle);
+        m_lightPos = glm::vec3(
+            std::cos(rad) * m_lightOrbitRadius,
+            m_lightHeight,
+            std::sin(rad) * m_lightOrbitRadius
+        );
+
+        // ── Light space matrix ────────────────────────────────────────────────
+        // We treat the point light as a spot aimed at the scene origin.
+        // Near/far planes: 1.0–25.0 covers our scene with good depth precision.
+        glm::mat4 lightProj = glm::perspective(
+            glm::radians(90.0f),  // wide FOV so the whole scene fits in shadow map
+            1.0f,                 // square shadow map → aspect 1:1
+            1.0f, 25.0f           // near / far
+        );
+        glm::mat4 lightView = glm::lookAt(
+            m_lightPos,
+            glm::vec3(0.0f, 0.0f, 0.0f),  // always look at scene centre
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+        m_lightSpaceMatrix = lightProj * lightView;
+    }
+
+    void onRender() override {
+
+        // ════════════════════════════════════════════════════════════════
+        // Pass 1 — Shadow pass: render scene depth from light's viewpoint
+        // ════════════════════════════════════════════════════════════════
+        m_shadowMap->bindForWriting();
+        glViewport(0, 0, Renderer::ShadowMap::WIDTH, Renderer::ShadowMap::HEIGHT);
+
+        // Cull front faces during shadow pass — reduces "peter panning"
+        // (shadow detaching from caster) and self-shadowing artefacts.
+        glCullFace(GL_FRONT);
+
+        m_shadowShader->bind();
+        m_shadowShader->setMat4("u_lightSpaceMatrix", m_lightSpaceMatrix);
+        m_model->draw(*m_shadowShader);  // only u_model + u_lightSpaceMatrix needed
+        m_shadowShader->unbind();
+
+        glCullFace(GL_BACK);  // restore for main pass
+        m_shadowMap->unbindWriting();
+
+        // ════════════════════════════════════════════════════════════════
+        // Pass 2 — Main pass: render scene with shadow map
+        // ════════════════════════════════════════════════════════════════
+        int w = m_window->getWidth();
+        int h = m_window->getHeight();
+        glViewport(0, 0, w, h);
+
+        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Bind shadow map depth texture to unit 5
+        // (units 0-4 are reserved for material maps)
+        m_shadowMap->bindTextureToUnit(5);
+
+        m_shader->bind();
+        m_shader->setMat4("u_view",             m_view);
+        m_shader->setMat4("u_projection",       m_projection);
+        m_shader->setVec3("u_cameraPos",        m_cameraPos);
+        m_shader->setMat4("u_lightSpaceMatrix", m_lightSpaceMatrix);
+        m_shader->setInt ("u_shadowMap",        5);
+
+        m_shader->setVec3 ("u_light.position",  m_lightPos);
+        m_shader->setVec3 ("u_light.color",     m_lightColor);
+        m_shader->setFloat("u_light.constant",  1.0f);
+        m_shader->setFloat("u_light.linear",    0.09f);
+        m_shader->setFloat("u_light.quadratic", 0.032f);
+
+        m_model->draw(*m_shader);
+        m_shader->unbind();
+
+        // ── Light visualizer cube ─────────────────────────────────────────────
+        m_unlitShader->bind();
+        m_unlitShader->setMat4("u_view",       m_view);
+        m_unlitShader->setMat4("u_projection", m_projection);
+        m_unlitShader->setVec3("u_color",      m_lightColor);
+
+        glm::mat4 lightModel = glm::translate(glm::mat4(1.0f), m_lightPos);
+        lightModel = glm::scale(lightModel, glm::vec3(0.2f));
+        m_unlitShader->setMat4("u_model", lightModel);
+
+        m_lightCubeBuffer->bind();
+        glDrawElements(GL_TRIANGLES, m_lightCubeBuffer->indexCount(), GL_UNSIGNED_INT, 0);
+        m_lightCubeBuffer->unbind();
+        m_unlitShader->unbind();
+    }
+
+    void onShutdown() override {
+        std::cout << "[App] Shutdown\n";
+    }
+
+private:
+    // Shaders
+    std::unique_ptr<Renderer::Shader>    m_shader;
+    std::unique_ptr<Renderer::Shader>    m_unlitShader;
+    std::unique_ptr<Renderer::Shader>    m_shadowShader;
+
+    // Scene
+    std::unique_ptr<Renderer::Model>     m_model;
+    std::unique_ptr<Renderer::Buffer>    m_lightCubeBuffer;
+    std::unique_ptr<Renderer::ShadowMap> m_shadowMap;
+
+    // Camera
+    glm::vec3 m_cameraPos  = glm::vec3(0.0f, 3.0f, 8.0f);
+    glm::mat4 m_view       = glm::mat4(1.0f);
+    glm::mat4 m_projection = glm::mat4(1.0f);
+
+    // Light
+    glm::vec3 m_lightPos         = glm::vec3(3.0f, 3.5f, 3.0f);
+    glm::vec3 m_lightColor       = glm::vec3(1.0f, 0.95f, 0.8f);
+    float     m_lightAngle       = 0.0f;
+    float     m_lightOrbitRadius = 4.0f;
+    float     m_lightHeight      = 3.5f;
+    glm::mat4 m_lightSpaceMatrix = glm::mat4(1.0f);
+
+    float m_rotation = 0.0f;
+};
+
+int main() {
+    try {
+        CottageApp app;
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << "[Fatal] " << e.what() << "\n";
+        return -1;
+    }
+    return 0;
+}
+
+```
+
+### `.clang-format`
+
+```
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 100
+
+BreakBeforeBraces: Allman
+
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+
+PointerAlignment: Left
+
+SortIncludes: true
+
+SpaceBeforeParens: ControlStatements
+
+ReflowComments: true
+
+IndentCaseLabels: true
+
+Standard: Latest
+```
+
+### `.gitignore`
+
+```
+# ─────────────────────────────────────────
+#  Build output
+# ─────────────────────────────────────────
+build/
+out/
+bin/
+lib/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+OpenGLRenderer
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# ─────────────────────────────────────────
+#  Assets (large files — track with Git LFS
+#  or keep out of repo entirely)
+# ─────────────────────────────────────────
+assets/models/
+assets/textures/
+*.obj
+*.fbx
+*.blend
+*.dae
+*.png
+*.jpg
+*.jpeg
+*.hdr
+*.exr
+*.tga
+*.mtl
+
+# Exception: keep small test assets if needed
+# !assets/test/**
+
+# ─────────────────────────────────────────
+#  VS Code
+# ─────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# ─────────────────────────────────────────
+#  macOS
+# ─────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ─────────────────────────────────────────
+#  Logs and temp files
+# ─────────────────────────────────────────
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────
+#  Dependencies (vendored via package manager)
+#  GLAD is an exception — it's generated source
+#  that belongs in the repo
+# ─────────────────────────────────────────
+# external/         ← do NOT ignore, GLAD lives here
+```
+
+### `CMakeLists.txt`
+
+```plaintext
+cmake_minimum_required(VERSION 3.20)
+project(OpenGLRenderer)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(OpenGL REQUIRED)
+find_package(glfw3  REQUIRED)
+find_package(glm    REQUIRED)
+find_package(assimp REQUIRED)
+
+# GLAD
+add_library(glad STATIC external/glad/src/glad.c)
+target_include_directories(glad PUBLIC external/glad/include)
+
+# ── Main renderer ─────────────────────────────────────────────────────────────
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    src/
+    external/glad/include
+    external/stb
+)
+
+if(APPLE)
+    target_link_libraries(${PROJECT_NAME}
+        glad glfw glm::glm assimp::assimp OpenGL::GL
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+    )
+else()
+    target_link_libraries(${PROJECT_NAME}
+        glad glfw glm::glm assimp::assimp OpenGL::GL
+    )
+endif()
+
+# ── Sandbox ───────────────────────────────────────────────────────────────────
+# Standalone single-file target for quick prototyping and demos.
+# Has the same external dependencies but zero coupling to src/.
+#
+# Build only sandbox:  cmake --build build --target Sandbox
+# Run it:              ./build/Sandbox
+#
+# The if(EXISTS) guard means CMake won't error if the file doesn't exist yet —
+# just create sandbox/sandbox.cpp and re-run cmake to activate it.
+if(EXISTS "${CMAKE_SOURCE_DIR}/sandbox/sandbox.cpp")
+    add_executable(Sandbox sandbox/sandbox.cpp)
+    target_include_directories(Sandbox PRIVATE
+        external/glad/include
+        external/stb
+    )
+    if(APPLE)
+        target_link_libraries(Sandbox
+            glad glfw glm::glm OpenGL::GL
+            "-framework Cocoa"
+            "-framework IOKit"
+            "-framework CoreVideo"
+        )
+    else()
+        target_link_libraries(Sandbox
+            glad glfw glm::glm OpenGL::GL
+        )
+    endif()
+endif()
+```
+
+### `Readme.md`
+
+``````markdown
+# Renderit: An OpenGL Renderer
+
+A progressive, from-scratch 3D rendering engine built in C++ and OpenGL — designed to learn and implement the full spectrum of real-time computer graphics, from fundamental geometry to physically based rendering.
+
+The goal is not just a working renderer but a professional, modular codebase that demonstrates mastery of every layer of the graphics pipeline.
+
+---
+
+## Roadmap
+
+- [x] **Step 1** — Window/Application architecture (GLFW, GLAD, core engine loop)
+- [x] **Step 2** — First cube: VAOs, VBOs, vertex and fragment shaders <p align="center"> <img src="docs/images/step2.webp" width="500"> </p>
+- [x] **Step 3** — Assimp model loader + material system <p align="center"> <img src="docs/images/step3.webp" width="500"> </p>
+- [x] **Step 4** — Texturing: UVs, stb_image, texture units <p align="center"> <img src="docs/images/step4.webp" width="500"> </p>
+- [x] **Step 5** — Blinn-Phong lighting: normals, diffuse, specular, ambient <p align="center"> <img src="docs/images/step5.gif" width="500"> </p> <p align="center"> <img src="docs/images/step5_2.gif" width="500"> </p>
+- [x] **Step 6** — Normal mapping (TBN matrix, tangent space)
+- [x] **Step 7** — PBR shading: Cook-Torrance BRDF, metallic/roughness workflow <p align="center"> <img src="docs/images/step7.webp" width="500"> </p>
+- [ ] **Step 8** — Shadow mapping
+- [ ] **Step 9** — Framebuffers: HDR, bloom, post-processing stack
+
+---
+
+## Concepts Covered
+
+**Core Pipeline**
+The transformation pipeline from model space through world, view, clip, and screen space. The MVP matrix. Perspective vs orthographic projection. The depth buffer and Z-fighting.
+
+**GPU Programming**
+How vertex and fragment shaders execute on the GPU. GLSL. How buffer objects (VAO/VBO/EBO) move data from CPU RAM to GPU VRAM. The programmable vs fixed-function pipeline.
+
+**Lighting & Materials**
+Phong and Blinn-Phong shading models. Normal mapping and tangent space. Physically Based Rendering — the reflectance equation, Cook-Torrance BRDF, metallic/roughness textures, image-based lighting.
+
+**Advanced Rendering**
+Framebuffer objects. Shadow mapping. HDR and tone mapping. Bloom and post-processing.
+
+---
+
+## Architecture
+
+```
+src/
+├── core/
+│   ├── Window.h/cpp          GLFW window and OpenGL context ownership
+│   └── Application.h/cpp     Main loop, deltaTime, virtual lifecycle hooks
+├── renderer/
+│   ├── Shader.h/cpp          GLSL compile/link, uniform helpers
+│   ├── Buffer.h/cpp          VAO/VBO/EBO abstractions
+│   ├── Texture.h/cpp         Image loading and GPU upload
+│   ├── Mesh.h/cpp            Single drawable geometry unit
+│   ├── Model.h/cpp           Mesh collection + materials
+│   └── Renderer.h/cpp        Draw call submission, GL state management
+├── scene/
+│   ├── Camera.h/cpp          View matrix, frustum, FPS controls
+│   ├── Light.h/cpp           Light types and properties
+│   └── Scene.h/cpp           Scene graph
+├── resources/
+│   └── ResourceManager.h/cpp Path-keyed cache for textures and models
+└── main.cpp                  Entry point — instantiates application subclass
+```
+
+The architecture separates **stable engine infrastructure** (Application, Window, Renderer) from **unstable scene content** (what to load, what to draw). New projects subclass `Application` without touching engine code. Designed to accommodate a parallel asset loading system (thread pool in ResourceManager) without architectural changes.
+
+---
+
+## Dependencies
+
+| Dependency | Purpose | Install |
+|---|---|---|
+| OpenGL 3.3 | Graphics API | Ships with macOS |
+| GLFW | Window creation, input | `brew install glfw` |
+| GLAD | OpenGL function loader | Generated at [glad.dav1d.de](https://glad.dav1d.de) |
+| GLM | Math (vectors, matrices) | `brew install glm` |
+| stb_image | Texture loading | Single header, vendored |
+| Assimp | Model loading (Step 6+) | `brew install assimp` |
+
+**Platform:** macOS (OpenGL 4.1 Core Profile max). Targets OpenGL 3.3 Core for broad compatibility.
+
+---
+
+## Building
+
+Requires CMake 3.20+, Clang, and the dependencies above. Put the generated GLAD folder inside root/external directory.
+
+```bash
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
+mkdir build && cd build
+cmake ..
+make
+./OpenGLRenderer
+```
+
+**Controls (current):** `Escape` — close window
+
+---
+
+## References
+
+- [learnopengl.com](https://learnopengl.com) — Joey de Vries
+- [Real-Time Rendering, 4th Ed.](https://www.realtimerendering.com) — Akenine-Möller et al.
+- [Physically Based Rendering](https://www.pbr-book.org) — Pharr, Jakob, Humphreys
+
+``````
+
+### `assets/shaders/basic.frag`
+
+```frag
+#version 330 core
+
+in vec2 v_texCoord;
+in vec3 v_normal;
+in vec3 v_fragPos;
+in vec3 v_tangent;
+in vec3 v_bitangent;
+in vec4 v_fragPosLightSpace;  // fragment position in light's clip space, for shadow lookup
+
+// ── Material ──────────────────────────────────────────────────────────────────
+// Supports both full PBR (metallic/roughness workflow) and legacy Blinn-Phong.
+// The shader picks the right path based on which maps/flags are present.
+struct Material {
+    // Albedo / base color (unit 0)
+    sampler2D diffuseMap;
+    bool      hasDiffuse;
+    vec3      diffuseColor;     // fallback when no diffuse map
+
+    // Normal map (unit 1)
+    sampler2D normalMap;
+    bool      hasNormal;
+
+    // PBR maps
+    sampler2D roughnessMap;     // unit 2
+    bool      hasRoughness;
+    float     roughness;        // fallback scalar (0=mirror, 1=fully rough)
+
+    sampler2D metallicMap;      // unit 3
+    bool      hasMetallic;
+    float     metallic;         // fallback scalar (0=dielectric, 1=metal)
+
+    sampler2D aoMap;            // unit 4
+    bool      hasAO;
+
+    // Legacy Blinn-Phong fallbacks (used when no PBR maps present)
+    vec3  specularColor;
+    float shininess;
+};
+uniform Material u_material;
+
+// ── Point Light ───────────────────────────────────────────────────────────────
+struct PointLight {
+    vec3  position;
+    vec3  color;
+    float constant;
+    float linear;
+    float quadratic;
+};
+uniform PointLight u_light;
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+uniform vec3 u_cameraPos;
+
+// ── Shadow map ────────────────────────────────────────────────────────────────
+uniform sampler2D u_shadowMap;  // depth texture from shadow pass (unit 5)
+
+out vec4 FragColor;
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  PBR helper functions
+// ═════════════════════════════════════════════════════════════════════════════
+
+const float PI = 3.14159265359;
+
+// ── D: GGX Normal Distribution Function ──────────────────────────────────────
+// Estimates the fraction of microfacets aligned to H.
+// High roughness → broad distribution → large soft highlight.
+// Low roughness  → narrow distribution → tight sharp highlight.
+float D_GGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom  = (NdotH2 * (a2 - 1.0) + 1.0);
+    return a2 / (PI * denom * denom);
+}
+
+// ── G: Schlick-GGX sub-function (single direction) ───────────────────────────
+float G_SchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+// ── G: Smith — combine both L and V directions ────────────────────────────────
+float G_Smith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    return G_SchlickGGX(NdotV, roughness) * G_SchlickGGX(NdotL, roughness);
+}
+
+// ── F: Fresnel-Schlick ────────────────────────────────────────────────────────
+// F0 = base reflectance at 0 degrees (dielectrics ~0.04, metals = albedo).
+vec3 F_Schlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// ── Shadow — PCF (Percentage Closer Filtering) ───────────────────────────────
+// Returns 0.0 = fully in shadow, 1.0 = fully lit.
+//
+// Steps:
+//  1. Project the fragment's light-space position into NDC [-1,1], then
+//     remap to shadow map UV space [0,1].
+//  2. Read the closest depth the light saw at that UV.
+//  3. Compare: if current depth > stored depth + bias → in shadow.
+//  4. Sample a 3x3 texel neighbourhood and average → soft shadow edges (PCF).
+//
+// bias: small offset to avoid self-shadowing ("shadow acne") from floating-
+//       point precision. Too large → light leaks at contact shadows.
+float shadowFactor(vec4 fragPosLightSpace, vec3 N, vec3 L) {
+    // Perspective divide: homogeneous → NDC [-1, 1]
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    // Remap NDC [-1,1] → texture UV [0,1]
+    projCoords = projCoords * 0.5 + 0.5;
+
+    // Fragments outside the light frustum are always lit
+    if (projCoords.z > 1.0) return 1.0;
+
+    float currentDepth = projCoords.z;
+
+    // Slope-scaled bias: surfaces at grazing angles to the light need a larger
+    // bias because their depth gradient is steeper in shadow map space.
+    float bias = max(0.005 * (1.0 - dot(N, L)), 0.001);
+
+    // ── PCF 3×3 kernel ────────────────────────────────────────────────────────
+    // Sample the 9 texels around the projected coordinate and average.
+    // texelSize = 1 texel in UV space = 1 / shadow map resolution.
+    float shadow    = 0.0;
+    vec2  texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
+
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(u_shadowMap,
+                                     projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (currentDepth - bias > pcfDepth) ? 0.0 : 1.0;
+        }
+    }
+    return shadow / 9.0;  // average over 3x3 = 9 samples
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Main
+// ═════════════════════════════════════════════════════════════════════════════
+
+void main() {
+
+    // ── Sample material maps ──────────────────────────────────────────────────
+    // Albedo textures are stored in sRGB. Convert to linear before any math.
+    vec3 albedo = u_material.hasDiffuse
+        ? pow(texture(u_material.diffuseMap, v_texCoord).rgb, vec3(2.2))
+        : u_material.diffuseColor;
+
+    float roughness = u_material.hasRoughness
+        ? texture(u_material.roughnessMap, v_texCoord).r
+        : u_material.roughness;
+
+    float metallic = u_material.hasMetallic
+        ? texture(u_material.metallicMap, v_texCoord).r
+        : u_material.metallic;
+
+    float ao = u_material.hasAO
+        ? texture(u_material.aoMap, v_texCoord).r
+        : 1.0;
+
+    // ── Normal (TBN — same as Step 7) ────────────────────────────────────────
+    vec3 T     = normalize(v_tangent);
+    vec3 B     = normalize(v_bitangent);
+    vec3 Ngeom = normalize(v_normal);
+    mat3 TBN   = mat3(T, B, Ngeom);
+
+    vec3 N;
+    if (u_material.hasNormal) {
+        vec3 nTangent = texture(u_material.normalMap, v_texCoord).rgb;
+        nTangent = normalize(nTangent * 2.0 - 1.0);
+        // FBX models use DirectX-convention tangent space where Y points down.
+        // Assimp's aiProcess_FlipUVs flips the V coordinate, which inverts the
+        // tangent Y axis. Negate Y here to restore correct normal orientation.
+        nTangent.y = -nTangent.y;
+        N = normalize(TBN * nTangent);
+    } else {
+        N = Ngeom;
+    }
+
+    // ── View and light vectors ────────────────────────────────────────────────
+    vec3 V = normalize(u_cameraPos - v_fragPos);
+    vec3 L = normalize(u_light.position - v_fragPos);
+    vec3 H = normalize(V + L);
+
+    // ── Attenuation ───────────────────────────────────────────────────────────
+    float d           = length(u_light.position - v_fragPos);
+    float attenuation = 1.0 / (u_light.constant
+                              + u_light.linear    * d
+                              + u_light.quadratic * d * d);
+    vec3 radiance = u_light.color * attenuation;
+
+    // ── PBR or Blinn-Phong? ───────────────────────────────────────────────────
+    // Fall back to Blinn-Phong for models without metallic/roughness maps
+    // so the cottage and character model continue to look correct.
+    bool isPBR = u_material.hasRoughness || u_material.hasMetallic;
+
+    vec3 result;
+
+    if (isPBR) {
+        // ── Cook-Torrance BRDF ────────────────────────────────────────────────
+
+        // F0: base reflectance at normal incidence.
+        //   Dielectrics ≈ 0.04 for almost all non-metals.
+        //   Metals: F0 is the albedo color (copper, gold etc.).
+        vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+        float D = D_GGX(N, H, roughness);
+        float G = G_Smith(N, V, L, roughness);
+        vec3  F = F_Schlick(max(dot(H, V), 0.0), F0);
+
+        float NdotL = max(dot(N, L), 0.0);
+        float NdotV = max(dot(N, V), 0.0);
+
+        // Cook-Torrance specular lobe
+        vec3 specular = (D * G * F) / (4.0 * NdotV * NdotL + 0.0001);
+
+        // Energy conservation:
+        //   ks = Fresnel (specularly reflected fraction)
+        //   kd = remainder that enters the surface and diffuses out
+        //   Metals have zero diffuse (all energy stays in specular).
+        vec3 ks = F;
+        vec3 kd = (vec3(1.0) - ks) * (1.0 - metallic);
+
+        vec3 Lo = (kd * albedo / PI + specular) * radiance * NdotL;
+
+        // ── Shadow ────────────────────────────────────────────────────────────
+        // Shadow only attenuates direct lighting (Lo), not ambient.
+        // Ambient represents indirect/bounced light that reaches shadowed areas.
+        float shadow = shadowFactor(v_fragPosLightSpace, N, L);
+
+        // Ambient — simple constant. Step 10 replaces this with IBL.
+        vec3 ambient = vec3(0.03) * albedo * ao;
+
+        result = ambient + Lo * shadow;
+
+        // ── Tone mapping + gamma correction ───────────────────────────────────
+        // PBR math runs in HDR linear space. Map to LDR sRGB for display.
+        result = result / (result + vec3(1.0));   // Reinhard tone map
+        result = pow(result, vec3(1.0 / 2.2));    // linear → sRGB
+
+    } else {
+        // ── Legacy Blinn-Phong (cottage, girl model, etc.) ────────────────────
+        float ambientStrength = 0.12;
+        vec3  ambient  = ambientStrength * u_light.color * albedo;
+        float diff     = max(dot(N, L), 0.0);
+        vec3  diffuse  = diff * u_light.color * albedo;
+        float spec     = pow(max(dot(N, H), 0.0), u_material.shininess);
+        vec3  specular = spec * u_light.color * u_material.specularColor;
+
+        float shadow = shadowFactor(v_fragPosLightSpace, N, L);
+        result = ambient + (diffuse + specular) * attenuation * shadow;
+    }
+
+    FragColor = vec4(result, 1.0);
+}
+
+```
+
+### `assets/shaders/basic.vert`
+
+```vert
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_texCoord;
+layout(location = 2) in vec3 a_normal;
+layout(location = 3) in vec3 a_tangent;
+layout(location = 4) in vec3 a_bitangent;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+uniform mat4 u_lightSpaceMatrix;  // light view * light projection, for shadow mapping
+
+out vec2 v_texCoord;
+out vec3 v_normal;
+out vec3 v_fragPos;
+out vec3 v_tangent;
+out vec3 v_bitangent;
+out vec4 v_fragPosLightSpace;  // world position transformed into light clip space
+
+void main() {
+    // Transform position to world space first, then to clip space.
+    // We need the world space position in the fragment shader for
+    // lighting — distance to light, direction to camera, etc.
+    vec4 worldPos = u_model * vec4(a_position, 1.0);
+    gl_Position   = u_projection * u_view * worldPos;
+
+    v_texCoord = a_texCoord;
+    v_fragPos  = vec3(worldPos);
+
+    // Transform world position into light's clip space.
+    // The fragment shader will use this for shadow map lookup.
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+
+    // Normal matrix: transpose of inverse of model matrix.
+    // Correctly handles non-uniform scaling — if you scale X by 2
+    // and Y by 1, normals would point wrong without this correction.
+    mat3 normalMatrix = mat3(transpose(inverse(u_model)));
+    v_normal    = normalize(normalMatrix * a_normal);
+    v_tangent   = normalize(normalMatrix * a_tangent);
+    v_bitangent = normalize(normalMatrix * a_bitangent);
+}
+
+```
+
+### `assets/shaders/shadow.frag`
+
+```frag
+#version 330 core
+
+// No output needed — OpenGL writes gl_FragDepth automatically.
+// This shader exists only so we have a complete program to link.
+// Some drivers require an explicit empty fragment shader for depth-only passes.
+
+void main() {
+    // Depth is written implicitly from gl_FragCoord.z.
+    // No color output — the framebuffer has no color attachment.
+}
+
+```
+
+### `assets/shaders/shadow.vert`
+
+```vert
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+
+// Combined light-view * light-projection matrix.
+// Transforms each vertex into the light's clip space so the GPU writes
+// the correct depth value into the shadow map framebuffer.
+uniform mat4 u_lightSpaceMatrix;
+uniform mat4 u_model;
+
+void main() {
+    gl_Position = u_lightSpaceMatrix * u_model * vec4(a_position, 1.0);
+}
+
+```
+
+### `assets/shaders/unlit.frag`
+
+```frag
+#version 330 core
+
+uniform vec3 u_color;
+out vec4 FragColor;
+
+void main() {
+    FragColor = vec4(u_color, 1.0);
+}
+
+```
+
+### `assets/shaders/unlit.vert`
+
+```vert
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+
+void main() {
+    gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+}
+
+```
+

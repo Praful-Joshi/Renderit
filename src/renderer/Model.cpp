@@ -41,16 +41,21 @@ void Model::setBaseRotation(float angleDegrees, const glm::vec3& axis) {
 }
 
 void Model::rebuildModelMatrix() {
-    // Order: scale → baseRotation → spin → translate
-    // baseRotation fixes the model's rest orientation (applied first, in model space).
-    // The per-frame spin is layered on top in world space.
+    // Correct transform order (applied right-to-left by GPU):
+    //   1. baseRotation — fixes model's rest orientation in model space (innermost)
+    //   2. spin         — rotates around world Y axis
+    //   3. translate    — moves to world position
+    //   4. scale        — uniform scale
+    //
+    // Key insight: baseRotation must be the INNERMOST operation so it always
+    // corrects the model's local axes regardless of the current spin angle.
+    // If it were applied after the spin, its axis would rotate with the model
+    // and produce wrong normals (black patches) at certain orientations.
     glm::mat4 m = glm::mat4(1.0f);
     m = glm::translate(m, m_position);
-    if (m_angleDeg != 0.0f)
-        m = glm::rotate(m, glm::radians(m_angleDeg), m_rotationAxis);
-    m = m * m_baseRotation;   // base orientation fix applied after spin
+    m = glm::rotate(m, glm::radians(m_angleDeg), m_rotationAxis);
     m = glm::scale(m, m_scale);
-    m_modelMatrix = m;
+    m_modelMatrix = m * m_baseRotation;  // base fix is innermost — model space
 }
 
 } // namespace Renderer

@@ -2,6 +2,7 @@
 #include "renderer/Shader.h"
 #include "renderer/Model.h"
 #include "renderer/Buffer.h"
+#include "renderer/ShadowMap.h"
 #include "scene/AssimpLoader.h"
 
 #include <glad/glad.h>
@@ -9,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -28,44 +30,45 @@ protected:
             "../assets/shaders/unlit.vert",
             "../assets/shaders/unlit.frag"
         );
+        m_shadowShader = std::make_unique<Renderer::Shader>(
+            "../assets/shaders/shadow.vert",
+            "../assets/shaders/shadow.frag"
+        );
+
+        // ── Shadow map ────────────────────────────────────────────────────────
+        m_shadowMap = std::make_unique<Renderer::ShadowMap>();
 
         // ── Load model ────────────────────────────────────────────────────────
-        m_model = Scene::AssimpLoader::load("../models/flesh/flesh_blob.fbx");
+        m_model = Scene::AssimpLoader::load("../models/cottage/cottage_obj.obj");
+
+        m_model->setScale(0.1f);
+        // m_model->setBaseRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f)); 
 
         // ── Light cube geometry ───────────────────────────────────────────────
-        // A simple unit cube — 8 unique positions, 36 indices.
-        // We only need positions for the unlit shader (no normals/UVs needed).
         std::vector<float> cubeVerts = {
             -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f,  0.5f, 0.5f,-0.5f, -0.5f, 0.5f,-0.5f,
             -0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f,
         };
         std::vector<uint32_t> cubeIdx = {
-            0,1,2, 0,2,3,   // back
-            4,5,6, 4,6,7,   // front
-            0,4,7, 0,7,3,   // left
-            1,5,6, 1,6,2,   // right
-            3,2,6, 3,6,7,   // top
-            0,1,5, 0,5,4,   // bottom
+            0,1,2, 0,2,3,
+            4,5,6, 4,6,7,
+            0,4,7, 0,7,3,
+            1,5,6, 1,6,2,
+            3,2,6, 3,6,7,
+            0,1,5, 0,5,4,
         };
-
-        // Upload cube with only position attribute (location 0)
         std::vector<Renderer::VertexAttribute> cubeAttribs = {{ 0, 3, 0 }};
         m_lightCubeBuffer = std::make_unique<Renderer::Buffer>();
         m_lightCubeBuffer->uploadVertices(cubeVerts, cubeAttribs, 3 * sizeof(float));
         m_lightCubeBuffer->uploadIndices(cubeIdx);
 
-        // Model setup
-        m_model->setScale(3.5f);
-        m_model->setBaseRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));  // tip upright
-
         // ── Camera ────────────────────────────────────────────────────────────
-        m_cameraPos = glm::vec3(0.0f, 5.0f, 8.0f);
+        m_cameraPos = glm::vec3(0.0f, 3.0f, 8.0f);
         m_view = glm::lookAt(
             m_cameraPos,
-            glm::vec3(0.0f, 2.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
-
         float aspect = static_cast<float>(m_window->getWidth()) /
                        static_cast<float>(m_window->getHeight());
         m_projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
@@ -75,62 +78,97 @@ protected:
         if (isKeyPressed(GLFW_KEY_ESCAPE))
             glfwSetWindowShouldClose(m_window->getNativeWindow(), true);
 
-        // Rotate the cottage slowly
         m_rotation += 20.0f * deltaTime;
         m_model->setRotation(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f));
 
-        // Orbit the light around the scene so you can see the lighting change
-        // as it moves — makes diffuse and specular effects very obvious.
-        // m_lightAngle += 60.0f * deltaTime;  // 60 degrees per second
-        // float rad = glm::radians(m_lightAngle);
-        // m_lightPos = glm::vec3(
-        //     std::cos(rad) * m_lightOrbitRadius,
-        //     m_lightHeight,
-        //     std::sin(rad) * m_lightOrbitRadius
-        // );
+        // Orbit light
+        m_lightAngle += 60.0f * deltaTime;
+        float rad = glm::radians(m_lightAngle);
+        m_lightPos = glm::vec3(
+            std::cos(rad) * m_lightOrbitRadius,
+            m_lightHeight,
+            std::sin(rad) * m_lightOrbitRadius
+        );
+
+        // ── Light space matrix ────────────────────────────────────────────────
+        // We treat the point light as a spot aimed at the scene origin.
+        // Near/far planes: 1.0–25.0 covers our scene with good depth precision.
+        glm::mat4 lightProj = glm::perspective(
+            glm::radians(90.0f),  // wide FOV so the whole scene fits in shadow map
+            1.0f,                 // square shadow map → aspect 1:1
+            1.0f, 25.0f           // near / far
+        );
+        glm::mat4 lightView = glm::lookAt(
+            m_lightPos,
+            glm::vec3(0.0f, 0.0f, 0.0f),  // always look at scene centre
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+        m_lightSpaceMatrix = lightProj * lightView;
     }
 
     void onRender() override {
 
-        // ── Cottage — Blinn-Phong lit ─────────────────────────────────────────
+        // ════════════════════════════════════════════════════════════════
+        // Pass 1 — Shadow pass: render scene depth from light's viewpoint
+        // ════════════════════════════════════════════════════════════════
+        m_shadowMap->bindForWriting();
+        glViewport(0, 0, Renderer::ShadowMap::WIDTH, Renderer::ShadowMap::HEIGHT);
+
+        // Cull front faces during shadow pass — reduces "peter panning"
+        // (shadow detaching from caster) and self-shadowing artefacts.
+        glCullFace(GL_FRONT);
+
+        m_shadowShader->bind();
+        m_shadowShader->setMat4("u_lightSpaceMatrix", m_lightSpaceMatrix);
+        m_model->draw(*m_shadowShader);  // only u_model + u_lightSpaceMatrix needed
+        m_shadowShader->unbind();
+
+        glCullFace(GL_BACK);  // restore for main pass
+        m_shadowMap->unbindWriting();
+
+        // ════════════════════════════════════════════════════════════════
+        // Pass 2 — Main pass: render scene with shadow map
+        // ════════════════════════════════════════════════════════════════
+        int w = m_window->getWidth();
+        int h = m_window->getHeight();
+        glViewport(0, 0, w, h);
+
+        glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Bind shadow map depth texture to unit 5
+        // (units 0-4 are reserved for material maps)
+        m_shadowMap->bindTextureToUnit(5);
+
         m_shader->bind();
+        m_shader->setMat4("u_view",             m_view);
+        m_shader->setMat4("u_projection",       m_projection);
+        m_shader->setVec3("u_cameraPos",        m_cameraPos);
+        m_shader->setMat4("u_lightSpaceMatrix", m_lightSpaceMatrix);
+        m_shader->setInt ("u_shadowMap",        5);
 
-        // Camera + projection
-        m_shader->setMat4("u_view",       m_view);
-        m_shader->setMat4("u_projection", m_projection);
-        m_shader->setVec3("u_cameraPos",  m_cameraPos);
-
-        // Point light uniforms
         m_shader->setVec3 ("u_light.position",  m_lightPos);
         m_shader->setVec3 ("u_light.color",     m_lightColor);
         m_shader->setFloat("u_light.constant",  1.0f);
         m_shader->setFloat("u_light.linear",    0.09f);
         m_shader->setFloat("u_light.quadratic", 0.032f);
 
-        // Draw model — sets u_model internally per mesh
         m_model->draw(*m_shader);
-
         m_shader->unbind();
 
-        // ── Light visualizer cube — unlit ─────────────────────────────────────
-        // A small white/yellow cube floating at the light's world position.
-        // Rendered without lighting so it always appears bright regardless
-        // of the scene lighting — it IS the light source visually.
+        // ── Light visualizer cube ─────────────────────────────────────────────
         m_unlitShader->bind();
         m_unlitShader->setMat4("u_view",       m_view);
         m_unlitShader->setMat4("u_projection", m_projection);
         m_unlitShader->setVec3("u_color",      m_lightColor);
 
-        // Scale down to a small cube and position at the light location
         glm::mat4 lightModel = glm::translate(glm::mat4(1.0f), m_lightPos);
         lightModel = glm::scale(lightModel, glm::vec3(0.2f));
         m_unlitShader->setMat4("u_model", lightModel);
 
         m_lightCubeBuffer->bind();
-        glDrawElements(GL_TRIANGLES, m_lightCubeBuffer->indexCount(),
-                       GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, m_lightCubeBuffer->indexCount(), GL_UNSIGNED_INT, 0);
         m_lightCubeBuffer->unbind();
-
         m_unlitShader->unbind();
     }
 
@@ -140,24 +178,27 @@ protected:
 
 private:
     // Shaders
-    std::unique_ptr<Renderer::Shader> m_shader;
-    std::unique_ptr<Renderer::Shader> m_unlitShader;
+    std::unique_ptr<Renderer::Shader>    m_shader;
+    std::unique_ptr<Renderer::Shader>    m_unlitShader;
+    std::unique_ptr<Renderer::Shader>    m_shadowShader;
 
     // Scene
-    std::unique_ptr<Renderer::Model>  m_model;
-    std::unique_ptr<Renderer::Buffer> m_lightCubeBuffer;
+    std::unique_ptr<Renderer::Model>     m_model;
+    std::unique_ptr<Renderer::Buffer>    m_lightCubeBuffer;
+    std::unique_ptr<Renderer::ShadowMap> m_shadowMap;
 
     // Camera
     glm::vec3 m_cameraPos  = glm::vec3(0.0f, 3.0f, 8.0f);
     glm::mat4 m_view       = glm::mat4(1.0f);
     glm::mat4 m_projection = glm::mat4(1.0f);
 
-    // Light — orbits around the scene so lighting effects are clearly visible
-    glm::vec3 m_lightPos         = glm::vec3(3.0f, 3.0f, 3.0f);
-    glm::vec3 m_lightColor       = glm::vec3(4.0f, 3.8f, 3.2f);
+    // Light
+    glm::vec3 m_lightPos         = glm::vec3(3.0f, 2.5f, 2.0f);
+    glm::vec3 m_lightColor       = glm::vec3(1.0f, 0.95f, 0.8f);
     float     m_lightAngle       = 0.0f;
-    float     m_lightOrbitRadius = 4.0f;
-    float     m_lightHeight      = 3.5f;
+    float     m_lightOrbitRadius = 3.0f;
+    float     m_lightHeight      = 2.5f;
+    glm::mat4 m_lightSpaceMatrix = glm::mat4(1.0f);
 
     float m_rotation = 0.0f;
 };

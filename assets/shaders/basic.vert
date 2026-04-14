@@ -9,12 +9,14 @@ layout(location = 4) in vec3 a_bitangent;
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform mat4 u_lightSpaceMatrix;  // light view * light projection, for shadow mapping
 
 out vec2 v_texCoord;
 out vec3 v_normal;
 out vec3 v_fragPos;
 out vec3 v_tangent;
 out vec3 v_bitangent;
+out vec4 v_fragPosLightSpace;  // world position transformed into light clip space
 
 void main() {
     // Transform position to world space first, then to clip space.
@@ -25,6 +27,10 @@ void main() {
 
     v_texCoord = a_texCoord;
     v_fragPos  = vec3(worldPos);
+
+    // Transform world position into light's clip space.
+    // The fragment shader will use this for shadow map lookup.
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
 
     // Normal matrix: transpose of inverse of model matrix.
     // Correctly handles non-uniform scaling — if you scale X by 2

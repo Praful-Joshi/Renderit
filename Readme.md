@@ -15,7 +15,7 @@ The goal is not just a working renderer but a professional, modular codebase tha
 - [x] **Step 5** — Blinn-Phong lighting: normals, diffuse, specular, ambient <p align="center"> <img src="docs/images/step5.gif" width="500"> </p> <p align="center"> <img src="docs/images/step5_2.gif" width="500"> </p>
 - [x] **Step 6** — Normal mapping (TBN matrix, tangent space)
 - [x] **Step 7** — PBR shading: Cook-Torrance BRDF, metallic/roughness workflow <p align="center"> <img src="docs/images/step7.webp" width="500"> </p>
-- [ ] **Step 8** — Shadow mapping
+- [x] **Step 8** — Shadow mapping <p align="center"> <img src="docs/images/step8.webp" width="500"> </p>
 - [ ] **Step 9** — Framebuffers: HDR, bloom, post-processing stack
 
 ---

@@ -193,11 +193,11 @@ private:
     glm::mat4 m_projection = glm::mat4(1.0f);
 
     // Light
-    glm::vec3 m_lightPos         = glm::vec3(3.0f, 2.5f, 2.0f);
-    glm::vec3 m_lightColor       = glm::vec3(1.0f, 0.95f, 0.8f);
+    glm::vec3 m_lightPos         = glm::vec3(3.0f, 3.5f, 3.0f);
+    glm::vec3 m_lightColor       = glm::vec3(5.0f);
     float     m_lightAngle       = 0.0f;
-    float     m_lightOrbitRadius = 3.0f;
-    float     m_lightHeight      = 2.5f;
+    float     m_lightOrbitRadius = 4.0f;
+    float     m_lightHeight      = 3.5f;
     glm::mat4 m_lightSpaceMatrix = glm::mat4(1.0f);
 
     float m_rotation = 0.0f;

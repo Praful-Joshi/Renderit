@@ -9,6 +9,12 @@
     <div id="app">
       <main id="viewport-region">
         <canvas id="viewer-canvas"></canvas>
+        <div id="import-overlay">
+          <p>Drag and drop a 3D model here</p>
+          <button id="browse-button" type="button">Browse files</button>
+          <input id="file-input" type="file" accept=".gltf,.glb" hidden />
+        </div>
+        <p id="import-error" role="alert" hidden></p>
       </main>
       <aside id="sidebar-region">
         <h1 class="brand">Renderit</h1>

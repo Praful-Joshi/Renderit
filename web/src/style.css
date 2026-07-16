@@ -7,6 +7,10 @@
   --color-text-muted: #9aa1ac;
   --color-accent: #5b8cff;
   --color-accent-hover: #7ea0ff;
+  --color-overlay-bg: rgba(28, 31, 38, 0.85); /* --color-surface at 85% */
+  --color-error-bg: #3a1c1f;
+  --color-error-border: #7a2e33;
+  --color-error-text: #ffb4b8;
 
   --space-sm: 0.5rem;
   --space-md: 1rem;
@@ -46,6 +50,52 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+#import-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-lg);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  background: var(--color-overlay-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.6rem 1.2rem;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+#import-overlay p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+#import-overlay button {
+  pointer-events: auto;
+}
+
+#import-error {
+  position: absolute;
+  left: 50%;
+  top: var(--space-lg);
+  transform: translateX(-50%);
+  margin: 0;
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error-text);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  max-width: min(80%, 480px);
+}
+
+#viewport-region.drag-active #import-overlay {
+  border-color: var(--color-accent);
 }
 
 #sidebar-region {

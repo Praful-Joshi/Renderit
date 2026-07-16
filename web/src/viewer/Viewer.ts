@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { computeAutoFit } from "./AutoFit";
+import { resolveImportedFile } from "./ImportResolver";
 
 /**
  * Minimal surface Viewer needs from a renderer. Lets tests inject a stub
@@ -23,7 +25,10 @@ export interface ViewerOptions {
 }
 
 const DEFAULT_CAMERA_POSITION = new THREE.Vector3(0, 1.4, 4.2);
-const DEFAULT_CONTROLS_TARGET = new THREE.Vector3(0, 0.5, 0);
+// The origin — every imported model is Auto-fit to be centered here
+// (see AutoFit.ts), so the fixed camera framing below always applies
+// regardless of which model is currently loaded.
+const DEFAULT_CONTROLS_TARGET = new THREE.Vector3(0, 0, 0);
 
 export class Viewer {
   readonly scene: THREE.Scene;
@@ -34,6 +39,7 @@ export class Viewer {
   private readonly initialCameraPosition: THREE.Vector3;
   private readonly initialControlsTarget: THREE.Vector3;
   private animationFrameId: number | null = null;
+  private currentModel: THREE.Object3D | null = null;
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
@@ -76,26 +82,38 @@ export class Viewer {
       { once: true },
     );
 
-    this.addPlaceholderContent();
+    this.addDefaultLighting();
   }
 
-  /** Placeholder-lit object so camera/lighting behavior is verifiable before
-   * real model import lands (see issue #11). */
-  private addPlaceholderContent(): void {
+  /** Fixed scene lighting — until day/night HDRI presets land (see issue
+   * #14), every imported model needs at least this to be visible. */
+  private addDefaultLighting(): void {
     const ambient = new THREE.AmbientLight(0xffffff, 0.4);
     const directional = new THREE.DirectionalLight(0xffffff, 1.2);
     directional.position.set(3, 5, 2);
     this.scene.add(ambient, directional);
+  }
 
-    const geometry = new THREE.TorusKnotGeometry(0.6, 0.2, 128, 32);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x5b8cff,
-      roughness: 0.35,
-      metalness: 0.4,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.y = 0.5;
-    this.scene.add(mesh);
+  /** Used for both the bundled showcase model on startup and visitor
+   * imports, so there's exactly one code path for "a model is now on
+   * screen" — rejecting leaves the current model untouched. */
+  async importModel(file: File): Promise<THREE.Object3D> {
+    const model = await resolveImportedFile(file);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const { scale, position } = computeAutoFit(box);
+    model.scale.setScalar(scale);
+    model.position.copy(position);
+
+    if (this.currentModel) {
+      this.scene.remove(this.currentModel);
+      disposeObject3D(this.currentModel);
+    }
+
+    this.scene.add(model);
+    this.currentModel = model;
+
+    return model;
   }
 
   resetView(): void {
@@ -138,4 +156,23 @@ export class Viewer {
     this.controls.dispose();
     this.renderer.dispose();
   }
+}
+
+/** Frees GPU-side geometry/material/texture buffers so replacing the
+ * currently displayed model doesn't leak resources across imports. */
+function disposeObject3D(root: THREE.Object3D): void {
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+
+    mesh.geometry.dispose();
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) {
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture) value.dispose();
+      }
+      material.dispose();
+    }
+  });
 }

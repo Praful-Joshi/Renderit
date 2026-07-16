@@ -151,9 +151,13 @@ void main() {
         ? pow(texture(u_material.diffuseMap, v_texCoord).rgb, vec3(2.2))
         : u_material.diffuseColor;
 
+    // Clamp away from 0: at true-zero roughness, D_GGX's denominator can hit
+    // exactly 0 at NdotH == 1 (a perfectly aligned mirror reflection), producing
+    // a NaN that flickers as black/white pixels on chrome-like materials.
     float roughness = u_material.hasRoughness
         ? texture(u_material.roughnessMap, v_texCoord).r
         : u_material.roughness;
+    roughness = max(roughness, 0.045);
 
     float metallic = u_material.hasMetallic
         ? texture(u_material.metallicMap, v_texCoord).r
@@ -254,6 +258,12 @@ void main() {
 
         float shadow = shadowFactor(v_fragPosLightSpace, N, L);
         result = ambient + (diffuse + specular) * attenuation * shadow;
+
+        // ── Tone mapping + gamma correction ───────────────────────────────────
+        // Match the PBR path so non-PBR models (cottage, girl model) don't
+        // render darker/muddier than PBR-textured models in the same scene.
+        result = result / (result + vec3(1.0));   // Reinhard tone map
+        result = pow(result, vec3(1.0 / 2.2));    // linear → sRGB
     }
 
     FragColor = vec4(result, 1.0);

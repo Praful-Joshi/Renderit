@@ -39,9 +39,9 @@ protected:
         m_shadowMap = std::make_unique<Renderer::ShadowMap>();
 
         // ── Load model ────────────────────────────────────────────────────────
-        m_model = Scene::AssimpLoader::load("../models/cottage/cottage_obj.obj");
+        m_model = Scene::AssimpLoader::load("../models/heart/Heart.fbx");
 
-        m_model->setScale(0.1f);
+        m_model->setScale(1.0f);
         // m_model->setBaseRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f)); 
 
         // ── Light cube geometry ───────────────────────────────────────────────
@@ -69,14 +69,18 @@ protected:
             glm::vec3(0.0f, 1.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
-        float aspect = static_cast<float>(m_window->getWidth()) /
-                       static_cast<float>(m_window->getHeight());
-        m_projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
     }
 
     void onUpdate(float deltaTime) override {
         if (isKeyPressed(GLFW_KEY_ESCAPE))
             glfwSetWindowShouldClose(m_window->getNativeWindow(), true);
+
+        // Recomputed every frame (cheap) so the window can be freely resized
+        // without stretching the image — getWidth()/getHeight() already track
+        // the live framebuffer size via Window's resize callback.
+        float aspect = static_cast<float>(m_window->getWidth()) /
+                       static_cast<float>(m_window->getHeight());
+        m_projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
 
         m_rotation += 20.0f * deltaTime;
         m_model->setRotation(m_rotation, glm::vec3(0.0f, 1.0f, 0.0f));

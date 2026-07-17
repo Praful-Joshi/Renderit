@@ -24,15 +24,19 @@ _Avoid_: Auto-rotate (that term is reserved for the idle spin behavior, a differ
 The slow automatic spin that plays before the user's first drag interaction, then stops permanently for that session once the user takes control of the camera.
 
 **Lighting preset**:
-One of two HDRI-based image-based-lighting configurations — Day or Night — swapped via the settings panel. Environment map drives lighting/reflections only; the visible background stays a neutral studio backdrop regardless of preset.
-_Avoid_: Environment, skybox (the HDRI is not shown as a visible backdrop — see the "studio backdrop" decision).
+One of two HDRI-based image-based-lighting configurations — Day or Night — swapped via the settings panel. Drives lighting/reflections (`scene.environment`) regardless of the current Background mode.
+_Avoid_: Environment, skybox — "environment map" is fine as a Three.js implementation detail, but the user-facing concept is the Lighting preset.
+
+**Background mode**:
+Whether the visible `scene.background` is the fixed neutral studio backdrop (Studio, the default) or the active Lighting preset's own HDRI image (HDRI), toggled independently of the Lighting preset itself in the settings panel. Lighting preset picks *which* HDRI lights the scene; Background mode picks whether that HDRI is also *visible* — the two are separate knobs.
+_Avoid_: Skybox, Environment toggle (this project's term is "Background mode").
 
 **Showcase model**:
 The default model bundled with the site and pre-loaded into the Viewer before a visitor imports anything, so the page demonstrates quality immediately.
 _Avoid_: Demo model, sample model.
 
 **Settings panel**:
-The sidebar UI outside the viewport: scale slider, rotation sliders (X/Y/Z), lighting preset toggle, reset-view button.
+The sidebar UI outside the viewport: scale slider, rotation sliders (X/Y/Z), lighting preset toggle, background mode toggle, reset-view button.
 
 **Metadata panel**:
 Displays file name & format, file size, triangle/vertex count, and structural details (mesh/material/texture counts, bounding-box dimensions) for the currently imported model.

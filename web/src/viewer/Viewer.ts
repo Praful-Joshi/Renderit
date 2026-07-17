@@ -27,6 +27,12 @@ export interface ImportModelResult {
   missingResources: string[];
 }
 
+/** Whether the visible scene.background is the fixed neutral studio color
+ * (default) or the active Lighting preset's own HDRI image. Independent of
+ * Lighting preset, which always drives scene.environment regardless of this
+ * setting — see web/CONTEXT.md's "Background mode". */
+export type BackgroundMode = "studio" | "hdri";
+
 export interface ViewerOptions {
   canvas: HTMLCanvasElement;
   /** Injectable for tests; defaults to a real THREE.WebGLRenderer. */
@@ -58,17 +64,20 @@ export class Viewer {
   private animationFrameId: number | null = null;
   private currentModel: THREE.Object3D | null = null;
   private currentModelObjectUrls: string[] = [];
+  private readonly studioBackgroundColor: THREE.Color;
   private activeLightingPreset: LightingPreset | null = null;
+  private activeBackgroundMode: BackgroundMode = "studio";
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
     const height = options.height || options.canvas.clientHeight || 1;
 
     this.scene = new THREE.Scene();
-    // Fixed neutral studio backdrop — independent of the lighting preset,
-    // which drives scene.environment (lighting/reflections) only. See
-    // setLightingPreset() and docs/adr / web/CONTEXT.md's "Lighting preset".
-    this.scene.background = new THREE.Color(0x14161a);
+    // Studio is the default Background mode — see setBackgroundMode() and
+    // web/CONTEXT.md's "Background mode". Per-instance, not a shared
+    // module-level constant, since THREE.Color is mutable.
+    this.studioBackgroundColor = new THREE.Color(0x14161a);
+    this.scene.background = this.studioBackgroundColor;
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     this.camera.position.copy(DEFAULT_CAMERA_POSITION);
@@ -123,15 +132,49 @@ export class Viewer {
     return this.activeLightingPreset;
   }
 
+  /** Currently active Background mode — see setBackgroundMode(). */
+  get backgroundMode(): BackgroundMode {
+    return this.activeBackgroundMode;
+  }
+
   /**
-   * Switches scene.environment (lighting/reflections only — scene.background
-   * stays the fixed studio backdrop set in the constructor) to the given
-   * HDRI Lighting preset, delegating the fetch/parse/PMREM/cache work to
-   * lightingPresetManager (see LightingPresets.ts).
+   * Switches scene.environment (lighting/reflections) to the given HDRI
+   * Lighting preset, delegating the fetch/parse/PMREM/cache work to
+   * lightingPresetManager (see LightingPresets.ts). Independent of Background
+   * mode, but if hdri Background mode is active, the visible background is
+   * re-applied too so it keeps matching whichever preset is now lighting the
+   * scene.
    */
   async setLightingPreset(preset: LightingPreset): Promise<void> {
     this.scene.environment = await this.lightingPresetManager.load(preset);
     this.activeLightingPreset = preset;
+    this.applyBackgroundMode();
+  }
+
+  /**
+   * Switches the visible scene.background between the fixed studio color
+   * (studio, the default) and the active Lighting preset's own HDRI image
+   * (hdri) — see web/CONTEXT.md's "Background mode". Independent of
+   * setLightingPreset(): this only changes what's visible behind the model,
+   * never scene.environment (lighting/reflections stay driven by the
+   * Lighting preset regardless of this setting). If hdri is requested before
+   * any Lighting preset has loaded, falls back to the studio color until a
+   * preset resolves.
+   */
+  setBackgroundMode(mode: BackgroundMode): void {
+    this.activeBackgroundMode = mode;
+    this.applyBackgroundMode();
+  }
+
+  private applyBackgroundMode(): void {
+    // scene.environment is the single source of truth for "the active
+    // Lighting preset's texture" — setLightingPreset is the only place that
+    // writes it, so hdri mode can read it back directly rather than
+    // mirroring it into a second field.
+    this.scene.background =
+      this.activeBackgroundMode === "hdri" && this.scene.environment
+        ? this.scene.environment
+        : this.studioBackgroundColor;
   }
 
   /** Used for both the bundled showcase model on startup and visitor

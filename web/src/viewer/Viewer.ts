@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { computeAutoFit } from "./AutoFit";
 import { resolveImportedFile } from "./ImportResolver";
+import { buildImportFileSet } from "./ImportFileSet";
 
 /**
  * Minimal surface Viewer needs from a renderer. Lets tests inject a stub
@@ -14,6 +15,13 @@ export interface RendererLike {
   setPixelRatio(ratio: number): void;
   render(scene: THREE.Scene, camera: THREE.Camera): void;
   dispose(): void;
+}
+
+export interface ImportModelResult {
+  model: THREE.Object3D;
+  /** Texture/material references that couldn't be resolved anywhere in the
+   * import — the model still loads, just missing those maps. */
+  missingResources: string[];
 }
 
 export interface ViewerOptions {
@@ -40,6 +48,7 @@ export class Viewer {
   private readonly initialControlsTarget: THREE.Vector3;
   private animationFrameId: number | null = null;
   private currentModel: THREE.Object3D | null = null;
+  private currentModelObjectUrls: string[] = [];
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
@@ -96,26 +105,29 @@ export class Viewer {
 
   /** Used for both the bundled showcase model on startup and visitor
    * imports, so there's exactly one code path for "a model is now on
-   * screen" — rejecting leaves the current model untouched. `files` may be
-   * more than one for formats that need a companion resource (e.g. an .obj
-   * with its .mtl) — see ImportResolver. */
-  async importModel(files: File | File[]): Promise<THREE.Object3D> {
-    const model = await resolveImportedFile(Array.isArray(files) ? files : [files]);
+   * screen" — rejecting leaves the current model untouched. `source` may be
+   * a single file, multiple flat files (e.g. an .obj with its .mtl), a zip,
+   * or a folder-picker/drag-drop file list — see ImportFileSet. */
+  async importModel(source: File | File[]): Promise<ImportModelResult> {
+    const fileSet = await buildImportFileSet(source);
+    const { object, missingResources, objectUrls } = await resolveImportedFile(fileSet);
 
-    const box = new THREE.Box3().setFromObject(model);
+    const box = new THREE.Box3().setFromObject(object);
     const { scale, position } = computeAutoFit(box);
-    model.scale.setScalar(scale);
-    model.position.copy(position);
+    object.scale.setScalar(scale);
+    object.position.copy(position);
 
     if (this.currentModel) {
       this.scene.remove(this.currentModel);
       disposeObject3D(this.currentModel);
+      this.currentModelObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     }
 
-    this.scene.add(model);
-    this.currentModel = model;
+    this.scene.add(object);
+    this.currentModel = object;
+    this.currentModelObjectUrls = objectUrls;
 
-    return model;
+    return { model: object, missingResources };
   }
 
   resetView(): void {

@@ -1,5 +1,6 @@
 import "./style.css";
 import { Viewer } from "./viewer/Viewer";
+import { filesFromDataTransfer } from "./viewer/DragDropFiles";
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -14,6 +15,8 @@ const viewportRegion = requireElement<HTMLElement>("#viewport-region");
 const resetViewButton = requireElement<HTMLButtonElement>("#reset-view-button");
 const browseButton = requireElement<HTMLButtonElement>("#browse-button");
 const fileInput = requireElement<HTMLInputElement>("#file-input");
+const browseFolderButton = requireElement<HTMLButtonElement>("#browse-folder-button");
+const folderInput = requireElement<HTMLInputElement>("#folder-input");
 const importError = requireElement<HTMLElement>("#import-error");
 
 const viewer = new Viewer({
@@ -34,8 +37,14 @@ window.addEventListener("resize", () => {
 
 async function importFiles(files: File[]): Promise<void> {
   importError.hidden = true;
+  importError.classList.remove("warning");
   try {
-    await viewer.importModel(files);
+    const { missingResources } = await viewer.importModel(files);
+    if (missingResources.length > 0) {
+      importError.textContent = `Model loaded, but couldn't find: ${missingResources.join(", ")}`;
+      importError.classList.add("warning");
+      importError.hidden = false;
+    }
   } catch (error) {
     importError.textContent = error instanceof Error ? error.message : "Failed to import model.";
     importError.hidden = false;
@@ -47,6 +56,16 @@ browseButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const files = fileInput.files ? Array.from(fileInput.files) : [];
   fileInput.value = ""; // allow re-selecting the same file(s)
+  if (files.length > 0) void importFiles(files);
+});
+
+browseFolderButton.addEventListener("click", () => folderInput.click());
+
+folderInput.addEventListener("change", () => {
+  // <input webkitdirectory> sets .webkitRelativePath on every File — the
+  // same shape buildImportFileSet already expects.
+  const files = folderInput.files ? Array.from(folderInput.files) : [];
+  folderInput.value = "";
   if (files.length > 0) void importFiles(files);
 });
 
@@ -65,8 +84,10 @@ viewportRegion.addEventListener("dragleave", (event) => {
 viewportRegion.addEventListener("drop", (event) => {
   event.preventDefault();
   viewportRegion.classList.remove("drag-active");
-  const files = event.dataTransfer ? Array.from(event.dataTransfer.files) : [];
-  if (files.length > 0) void importFiles(files);
+  if (!event.dataTransfer) return;
+  void filesFromDataTransfer(event.dataTransfer).then((files) => {
+    if (files.length > 0) void importFiles(files);
+  });
 });
 
 async function importShowcaseModel(): Promise<void> {

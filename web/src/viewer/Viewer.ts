@@ -96,9 +96,11 @@ export class Viewer {
 
   /** Used for both the bundled showcase model on startup and visitor
    * imports, so there's exactly one code path for "a model is now on
-   * screen" — rejecting leaves the current model untouched. */
-  async importModel(file: File): Promise<THREE.Object3D> {
-    const model = await resolveImportedFile(file);
+   * screen" — rejecting leaves the current model untouched. `files` may be
+   * more than one for formats that need a companion resource (e.g. an .obj
+   * with its .mtl) — see ImportResolver. */
+  async importModel(files: File | File[]): Promise<THREE.Object3D> {
+    const model = await resolveImportedFile(Array.isArray(files) ? files : [files]);
 
     const box = new THREE.Box3().setFromObject(model);
     const { scale, position } = computeAutoFit(box);

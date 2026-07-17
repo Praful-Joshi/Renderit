@@ -49,6 +49,13 @@ assets/textures/
 web/node_modules/
 web/dist/
 
+# The asset ignores above (*.obj, *.fbx, *.dae, *.mtl, *.hdr, etc.) target
+# the native renderer's large/vendored assets. The web viewer bundles its
+# own small static assets (showcase model, HDRI lighting presets) and test
+# fixtures in these formats — both must ship in the repo.
+!web/public/**
+!web/src/test/fixtures/**
+
 # ─────────────────────────────────────────
 #  VS Code
 # ─────────────────────────────────────────

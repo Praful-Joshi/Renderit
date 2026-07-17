@@ -126,5 +126,27 @@ describe("Viewer", () => {
       await expect(viewer.importModel(file)).rejects.toBeInstanceOf(UnsupportedFormatError);
       expect(countMeshes(viewer.scene)).toBe(meshesBefore);
     });
+
+    // All 5 supported formats go through the exact same importModel/AutoFit
+    // path — no per-format special-casing outside the dispatcher itself.
+    it.each([
+      { format: "glTF/GLB", files: ["fixture-simple-box.glb"] },
+      { format: "OBJ+MTL", files: ["fixture-box.obj", "fixture-box.mtl"] },
+      { format: "FBX", files: ["fixture-box-zup.fbx"] },
+      { format: "STL", files: ["fixture-box.stl"] },
+      { format: "Collada", files: ["fixture-box-zup.dae"] },
+    ])("auto-fits a $format import the same way as every other format", async ({ files }) => {
+      const { viewer } = createViewer();
+      const inputFiles = files.map((name) => loadFixture(name, "application/octet-stream"));
+
+      const model = await viewer.importModel(inputFiles);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+
+      expect(Math.max(size.x, size.y, size.z)).toBeCloseTo(AUTO_FIT_TARGET_SIZE, 1);
+      expect(center.length()).toBeLessThan(0.1);
+    });
   });
 });

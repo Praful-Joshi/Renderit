@@ -32,10 +32,10 @@ window.addEventListener("resize", () => {
   viewer.resize(viewportRegion.clientWidth, viewportRegion.clientHeight);
 });
 
-async function importFile(file: File): Promise<void> {
+async function importFiles(files: File[]): Promise<void> {
   importError.hidden = true;
   try {
-    await viewer.importModel(file);
+    await viewer.importModel(files);
   } catch (error) {
     importError.textContent = error instanceof Error ? error.message : "Failed to import model.";
     importError.hidden = false;
@@ -45,9 +45,9 @@ async function importFile(file: File): Promise<void> {
 browseButton.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
-  const file = fileInput.files?.[0];
-  fileInput.value = ""; // allow re-selecting the same file
-  if (file) void importFile(file);
+  const files = fileInput.files ? Array.from(fileInput.files) : [];
+  fileInput.value = ""; // allow re-selecting the same file(s)
+  if (files.length > 0) void importFiles(files);
 });
 
 viewportRegion.addEventListener("dragover", (event) => {
@@ -65,15 +65,15 @@ viewportRegion.addEventListener("dragleave", (event) => {
 viewportRegion.addEventListener("drop", (event) => {
   event.preventDefault();
   viewportRegion.classList.remove("drag-active");
-  const file = event.dataTransfer?.files[0];
-  if (file) void importFile(file);
+  const files = event.dataTransfer ? Array.from(event.dataTransfer.files) : [];
+  if (files.length > 0) void importFiles(files);
 });
 
 async function importShowcaseModel(): Promise<void> {
   const url = `${import.meta.env.BASE_URL}models/showcase.glb`;
   const response = await fetch(url);
   const blob = await response.blob();
-  await importFile(new File([blob], "showcase.glb", { type: "model/gltf-binary" }));
+  await importFiles([new File([blob], "showcase.glb", { type: "model/gltf-binary" })]);
 }
 
 void importShowcaseModel();

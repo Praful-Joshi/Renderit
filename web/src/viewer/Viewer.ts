@@ -3,6 +3,9 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { computeAutoFit } from "./AutoFit";
 import { resolveImportedFile } from "./ImportResolver";
 import { buildImportFileSet } from "./ImportFileSet";
+import { LightingPresetManager, PMREMEnvironmentProcessor, type LightingPreset } from "./LightingPresets";
+
+export type { LightingPreset } from "./LightingPresets";
 
 /**
  * Minimal surface Viewer needs from a renderer. Lets tests inject a stub
@@ -28,6 +31,11 @@ export interface ViewerOptions {
   canvas: HTMLCanvasElement;
   /** Injectable for tests; defaults to a real THREE.WebGLRenderer. */
   renderer?: RendererLike;
+  /** Injectable for tests (PMREM prefiltering needs a live WebGL context);
+   * defaults to a LightingPresetManager built from the renderer above.
+   * Required if `renderer` is a non-WebGLRenderer stub — there's no real
+   * renderer to build the default manager's PMREM processor from then. */
+  lightingPresetManager?: LightingPresetManager;
   width?: number;
   height?: number;
 }
@@ -44,23 +52,40 @@ export class Viewer {
   readonly controls: OrbitControls;
 
   private readonly renderer: RendererLike;
+  private readonly lightingPresetManager: LightingPresetManager;
   private readonly initialCameraPosition: THREE.Vector3;
   private readonly initialControlsTarget: THREE.Vector3;
   private animationFrameId: number | null = null;
   private currentModel: THREE.Object3D | null = null;
   private currentModelObjectUrls: string[] = [];
+  private activeLightingPreset: LightingPreset | null = null;
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
     const height = options.height || options.canvas.clientHeight || 1;
 
     this.scene = new THREE.Scene();
+    // Fixed neutral studio backdrop — independent of the lighting preset,
+    // which drives scene.environment (lighting/reflections) only. See
+    // setLightingPreset() and docs/adr / web/CONTEXT.md's "Lighting preset".
     this.scene.background = new THREE.Color(0x14161a);
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     this.camera.position.copy(DEFAULT_CAMERA_POSITION);
 
-    this.renderer = options.renderer ?? new THREE.WebGLRenderer({ canvas: options.canvas, antialias: true });
+    let lightingPresetManager = options.lightingPresetManager;
+    if (options.renderer) {
+      this.renderer = options.renderer;
+    } else {
+      const webglRenderer = new THREE.WebGLRenderer({ canvas: options.canvas, antialias: true });
+      this.renderer = webglRenderer;
+      lightingPresetManager ??= new LightingPresetManager(new PMREMEnvironmentProcessor(webglRenderer));
+    }
+    if (!lightingPresetManager) {
+      throw new Error("Viewer: lightingPresetManager must be provided alongside a custom renderer");
+    }
+    this.lightingPresetManager = lightingPresetManager;
+
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio ?? 1, 2));
     this.renderer.setSize(width, height);
 
@@ -90,17 +115,23 @@ export class Viewer {
       },
       { once: true },
     );
-
-    this.addDefaultLighting();
   }
 
-  /** Fixed scene lighting — until day/night HDRI presets land (see issue
-   * #14), every imported model needs at least this to be visible. */
-  private addDefaultLighting(): void {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-    const directional = new THREE.DirectionalLight(0xffffff, 1.2);
-    directional.position.set(3, 5, 2);
-    this.scene.add(ambient, directional);
+  /** Currently active Lighting preset, or null before the first
+   * setLightingPreset() call resolves. */
+  get lightingPreset(): LightingPreset | null {
+    return this.activeLightingPreset;
+  }
+
+  /**
+   * Switches scene.environment (lighting/reflections only — scene.background
+   * stays the fixed studio backdrop set in the constructor) to the given
+   * HDRI Lighting preset, delegating the fetch/parse/PMREM/cache work to
+   * lightingPresetManager (see LightingPresets.ts).
+   */
+  async setLightingPreset(preset: LightingPreset): Promise<void> {
+    this.scene.environment = await this.lightingPresetManager.load(preset);
+    this.activeLightingPreset = preset;
   }
 
   /** Used for both the bundled showcase model on startup and visitor
@@ -169,6 +200,7 @@ export class Viewer {
     this.stop();
     this.controls.dispose();
     this.renderer.dispose();
+    this.lightingPresetManager.dispose();
   }
 }
 

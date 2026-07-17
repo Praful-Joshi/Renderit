@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { Viewer, type RendererLike } from "./Viewer";
 import { AUTO_FIT_TARGET_SIZE } from "./AutoFit";
 import { UnsupportedFormatError } from "./ImportResolver";
+import { LightingPresetManager, type EnvironmentProcessor } from "./LightingPresets";
 import { countMeshes, loadFixture, loadFolderFixture } from "../test/fixtures";
 
 function createStubRenderer(canvas: HTMLCanvasElement): RendererLike {
@@ -15,11 +16,36 @@ function createStubRenderer(canvas: HTMLCanvasElement): RendererLike {
   };
 }
 
+// PMREM prefiltering needs a live WebGL context (unavailable in jsdom), so
+// it's stubbed as an identity pass-through — enough to prove *which*
+// processed texture ends up bound to scene.environment and how many times
+// processing actually ran, without needing a real GPU.
+function createStubEnvironmentProcessor() {
+  return {
+    process: vi.fn((source: THREE.Texture) => source),
+    dispose: vi.fn(),
+  } satisfies EnvironmentProcessor;
+}
+
+// Stands in for Viewer's default fetch()-based HDR loading — resolves to
+// real, tiny, committed fixture files (see scripts/generate-test-assets.mjs)
+// so setLightingPreset's tests exercise the actual HDRLoader.parse()
+// codepath rather than an in-memory stub texture.
+function createStubLoadHdrBuffer() {
+  return vi.fn(async (path: string) => {
+    const fixtureName = path.includes("night") ? "fixture-night.hdr" : "fixture-day.hdr";
+    return loadFixture(fixtureName, "application/octet-stream").arrayBuffer();
+  });
+}
+
 function createViewer() {
   const canvas = document.createElement("canvas");
   const renderer = createStubRenderer(canvas);
-  const viewer = new Viewer({ canvas, renderer, width: 800, height: 600 });
-  return { viewer, canvas, renderer };
+  const environmentProcessor = createStubEnvironmentProcessor();
+  const loadHdrBuffer = createStubLoadHdrBuffer();
+  const lightingPresetManager = new LightingPresetManager(environmentProcessor, loadHdrBuffer);
+  const viewer = new Viewer({ canvas, renderer, lightingPresetManager, width: 800, height: 600 });
+  return { viewer, canvas, renderer, environmentProcessor, loadHdrBuffer };
 }
 
 describe("Viewer", () => {
@@ -62,13 +88,39 @@ describe("Viewer", () => {
     expect(viewer.controls.target.equals(initialTarget)).toBe(true);
   });
 
-  it("provides default lighting so imported models are visible", () => {
-    const { viewer } = createViewer();
-    let lightCount = 0;
-    viewer.scene.traverse((obj) => {
-      if ((obj as THREE.Light).isLight) lightCount++;
+  describe("setLightingPreset", () => {
+    it("processes and binds the day environment map", async () => {
+      const { viewer, environmentProcessor } = createViewer();
+
+      await viewer.setLightingPreset("day");
+
+      expect(viewer.scene.environment).not.toBeNull();
+      expect(viewer.lightingPreset).toBe("day");
+      expect(environmentProcessor.process).toHaveBeenCalledTimes(1);
     });
-    expect(lightCount).toBeGreaterThan(0);
+
+    it("binds a different environment texture for night than for day", async () => {
+      const { viewer } = createViewer();
+
+      await viewer.setLightingPreset("day");
+      const dayEnvironment = viewer.scene.environment;
+      await viewer.setLightingPreset("night");
+      const nightEnvironment = viewer.scene.environment;
+
+      expect(dayEnvironment).not.toBeNull();
+      expect(nightEnvironment).not.toBeNull();
+      expect(dayEnvironment).not.toBe(nightEnvironment);
+    });
+
+    it("leaves scene.background untouched — the HDRI drives lighting/reflections only", async () => {
+      const { viewer } = createViewer();
+      const backgroundBefore = viewer.scene.background;
+
+      await viewer.setLightingPreset("day");
+      await viewer.setLightingPreset("night");
+
+      expect(viewer.scene.background).toBe(backgroundBefore);
+    });
   });
 
   it("resizes the camera aspect and renderer on resize()", () => {

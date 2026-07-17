@@ -11,6 +11,9 @@
   --color-error-bg: #3a1c1f;
   --color-error-border: #7a2e33;
   --color-error-text: #ffb4b8;
+  --color-warning-bg: #3a2f1c;
+  --color-warning-border: #7a642e;
+  --color-warning-text: #ffdb99;
 
   --space-sm: 0.5rem;
   --space-md: 1rem;
@@ -92,6 +95,12 @@ body {
   padding: 0.6rem 1rem;
   font-size: 0.85rem;
   max-width: min(80%, 480px);
+}
+
+#import-error.warning {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-text);
 }
 
 #viewport-region.drag-active #import-overlay {

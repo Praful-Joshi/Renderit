@@ -22,6 +22,7 @@ const fs = await import("node:fs");
 const path = await import("node:path");
 const os = await import("node:os");
 const { execFileSync } = await import("node:child_process");
+const { zipSync } = await import("fflate");
 
 const webRoot = path.resolve(import.meta.dirname, "..");
 const fixturesDir = path.join(webRoot, "src/test/fixtures");
@@ -152,4 +153,111 @@ async function exportGlb(scene, outPath) {
   console.log("wrote src/test/fixtures/fixture-box-zup.dae");
 
   fs.rmSync(tmpDir, { recursive: true });
+}
+
+// fixture-multifile-model.gltf + .bin — a non-binary glTF export (external
+// buffer, no texture) for issue #13's zip/folder resolution tests. No image
+// reference is used deliberately: jsdom's <img> never fires onload/onerror
+// for any src (blob: or plain relative), regardless of whether the
+// reference resolves — so any fixture with a texture hangs forever inside
+// GLTFLoader.parse() under vitest. This fixture exercises the exact same
+// resolution mechanism (LoadingManager.setURLModifier, relative-path-first
+// + recursive-basename fallback) against the external .bin buffer instead,
+// which resolves via fetch() (polyfilled in test/setup.ts), not <img>.
+// Actual texture resolution is verified manually in a real browser instead
+// — see the ticket's manual QA notes.
+const multifileGltfName = "fixture-multifile-model.gltf";
+const multifileBinName = "fixture-multifile-model.bin";
+{
+  const scene = new THREE.Scene();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x8855ff }));
+  mesh.name = "MultifileBox";
+  scene.add(mesh);
+
+  const result = await new Promise((resolve, reject) => {
+    new GLTFExporter().parse(scene, resolve, reject, { binary: false, embedImages: false });
+  });
+
+  // GLTFExporter embeds the buffer as a data: URI even with binary:false;
+  // extract its bytes and rewrite the JSON to reference an external file
+  // instead, matching what a real multi-file glTF export looks like.
+  const dataUri = result.buffers[0].uri;
+  const binBytes = Buffer.from(dataUri.slice(dataUri.indexOf(",") + 1), "base64");
+  result.buffers[0].uri = multifileBinName;
+
+  fs.writeFileSync(path.join(fixturesDir, multifileGltfName), JSON.stringify(result));
+  fs.writeFileSync(path.join(fixturesDir, multifileBinName), binBytes);
+  console.log("wrote src/test/fixtures/" + multifileGltfName);
+  console.log("wrote src/test/fixtures/" + multifileBinName);
+}
+
+// fixture-model-flat.zip — the multifile model with .gltf and .bin at the
+// same zip level; the exporter's own buffer reference (a bare filename)
+// exact-matches the zip entry directly.
+{
+  const gltfBytes = fs.readFileSync(path.join(fixturesDir, multifileGltfName));
+  const binBytes = fs.readFileSync(path.join(fixturesDir, multifileBinName));
+  const zipped = zipSync({
+    [multifileGltfName]: new Uint8Array(gltfBytes),
+    [multifileBinName]: new Uint8Array(binBytes),
+  });
+  fs.writeFileSync(path.join(fixturesDir, "fixture-model-flat.zip"), zipped);
+  console.log("wrote src/test/fixtures/fixture-model-flat.zip");
+}
+
+// fixture-model-nested.zip — same content, but the .gltf and .bin sit in
+// different subfolders. The exporter's buffer reference is still just the
+// bare filename, so the exact-path lookup ("<bin-name>" at zip root) fails
+// and resolution must fall back to the recursive basename search to find
+// it at "buffers/<bin-name>" — this is what actually exercises the fallback
+// path, not just the zip-decompression mechanics.
+{
+  const gltfBytes = fs.readFileSync(path.join(fixturesDir, multifileGltfName));
+  const binBytes = fs.readFileSync(path.join(fixturesDir, multifileBinName));
+  const zipped = zipSync({
+    [`source/${multifileGltfName}`]: new Uint8Array(gltfBytes),
+    [`buffers/${multifileBinName}`]: new Uint8Array(binBytes),
+  });
+  fs.writeFileSync(path.join(fixturesDir, "fixture-model-nested.zip"), zipped);
+  console.log("wrote src/test/fixtures/fixture-model-nested.zip");
+}
+
+// fixture-unresolvable-texture.gltf — a minimal glTF whose material
+// references "textures/missing-diffuse.png", deliberately never bundled
+// alongside it anywhere. Hand-written JSON, not exported: GLTFExporter
+// requires a real texture image to reference (needs canvas to encode one,
+// unavailable here — see the FBX/Collada section above), but this fixture's
+// whole point is a reference with nothing behind it, so there's no image to
+// export in the first place. Used by ResourceResolver.test.ts to verify
+// missing-resource tracking against a real committed fixture file rather
+// than an inline-constructed one — the resolver-logic level is also as far
+// as this scenario can be exercised in the automated suite: jsdom's <img>
+// never fires load/error for any src, so routing this through the full
+// GLTFLoader/Viewer.importModel pipeline hangs regardless of whether the
+// reference resolves — confirmed and documented, not overlooked. The full
+// pipeline behavior (missing-resource warning banner shown, model still
+// renders) is verified manually in a real browser instead.
+{
+  const gltf = {
+    asset: { version: "2.0" },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+    materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+    textures: [{ source: 0 }],
+    images: [{ uri: "textures/missing-diffuse.png" }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3", max: [1, 1, 0], min: [0, 0, 0] }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 36 }],
+    buffers: [
+      {
+        uri:
+          "data:application/octet-stream;base64," +
+          Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer).toString("base64"),
+        byteLength: 36,
+      },
+    ],
+  };
+  fs.writeFileSync(path.join(fixturesDir, "fixture-unresolvable-texture.gltf"), JSON.stringify(gltf));
+  console.log("wrote src/test/fixtures/fixture-unresolvable-texture.gltf");
 }

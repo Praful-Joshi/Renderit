@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { Viewer, type RendererLike } from "./Viewer";
 import { AUTO_FIT_TARGET_SIZE } from "./AutoFit";
 import { UnsupportedFormatError } from "./ImportResolver";
-import { countMeshes, loadFixture } from "../test/fixtures";
+import { countMeshes, loadFixture, loadFolderFixture } from "../test/fixtures";
 
 function createStubRenderer(canvas: HTMLCanvasElement): RendererLike {
   return {
@@ -106,7 +106,7 @@ describe("Viewer", () => {
       // 2x4x2 box originally centered at (5,5,5) — see scripts/generate-test-assets.mjs.
       const file = loadFixture("fixture-offset-box.glb", "model/gltf-binary");
 
-      const model = await viewer.importModel(file);
+      const { model } = await viewer.importModel(file);
 
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
@@ -139,7 +139,7 @@ describe("Viewer", () => {
       const { viewer } = createViewer();
       const inputFiles = files.map((name) => loadFixture(name, "application/octet-stream"));
 
-      const model = await viewer.importModel(inputFiles);
+      const { model } = await viewer.importModel(inputFiles);
 
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
@@ -147,6 +147,52 @@ describe("Viewer", () => {
 
       expect(Math.max(size.x, size.y, size.z)).toBeCloseTo(AUTO_FIT_TARGET_SIZE, 1);
       expect(center.length()).toBeLessThan(0.1);
+    });
+
+    it("imports a zip file containing a flat multi-file glTF (.gltf + .bin at one level)", async () => {
+      const { viewer } = createViewer();
+      const zip = loadFixture("fixture-model-flat.zip", "application/zip");
+
+      const { model, missingResources } = await viewer.importModel(zip);
+
+      expect(countMeshes(model)).toBeGreaterThan(0);
+      expect(missingResources).toEqual([]);
+    });
+
+    it("imports a zip file with the model and buffer in different subfolders, resolving the buffer via the recursive fallback", async () => {
+      const { viewer } = createViewer();
+      const zip = loadFixture("fixture-model-nested.zip", "application/zip");
+
+      const { model, missingResources } = await viewer.importModel(zip);
+
+      expect(countMeshes(model)).toBeGreaterThan(0);
+      expect(missingResources).toEqual([]);
+    });
+
+    it("imports a folder selected via the file picker (flat layout)", async () => {
+      const { viewer } = createViewer();
+      const files = [
+        loadFolderFixture("MyModel", "fixture-multifile-model.gltf", "fixture-multifile-model.gltf", "model/gltf+json"),
+        loadFolderFixture("MyModel", "fixture-multifile-model.bin", "fixture-multifile-model.bin", "application/octet-stream"),
+      ];
+
+      const { model, missingResources } = await viewer.importModel(files);
+
+      expect(countMeshes(model)).toBeGreaterThan(0);
+      expect(missingResources).toEqual([]);
+    });
+
+    it("imports a folder with nested subfolders selected via the file picker", async () => {
+      const { viewer } = createViewer();
+      const files = [
+        loadFolderFixture("MyModel", "source/fixture-multifile-model.gltf", "fixture-multifile-model.gltf", "model/gltf+json"),
+        loadFolderFixture("MyModel", "buffers/fixture-multifile-model.bin", "fixture-multifile-model.bin", "application/octet-stream"),
+      ];
+
+      const { model, missingResources } = await viewer.importModel(files);
+
+      expect(countMeshes(model)).toBeGreaterThan(0);
+      expect(missingResources).toEqual([]);
     });
   });
 });

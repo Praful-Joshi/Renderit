@@ -10,9 +10,17 @@
       <main id="viewport-region">
         <canvas id="viewer-canvas"></canvas>
         <div id="import-overlay">
-          <p>Drag and drop a 3D model here</p>
+          <p>Drag and drop a 3D model, zip, or folder here</p>
           <button id="browse-button" type="button">Browse files</button>
-          <input id="file-input" type="file" accept=".gltf,.glb,.obj,.mtl,.fbx,.stl,.dae" multiple hidden />
+          <button id="browse-folder-button" type="button">Browse folder</button>
+          <input
+            id="file-input"
+            type="file"
+            accept=".gltf,.glb,.obj,.mtl,.fbx,.stl,.dae,.zip"
+            multiple
+            hidden
+          />
+          <input id="folder-input" type="file" webkitdirectory multiple hidden />
         </div>
         <p id="import-error" role="alert" hidden></p>
       </main>

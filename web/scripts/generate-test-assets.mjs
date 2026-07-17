@@ -261,3 +261,54 @@ const multifileBinName = "fixture-multifile-model.bin";
   fs.writeFileSync(path.join(fixturesDir, "fixture-unresolvable-texture.gltf"), JSON.stringify(gltf));
   console.log("wrote src/test/fixtures/fixture-unresolvable-texture.gltf");
 }
+
+function encodeRgbePixel(r, g, b) {
+  const maxComponent = Math.max(r, g, b);
+  if (maxComponent < 1e-32) return [0, 0, 0, 0];
+  const e = Math.ceil(Math.log2(maxComponent));
+  const scale = 256 / Math.pow(2, e);
+  return [
+    Math.min(255, Math.round(r * scale)),
+    Math.min(255, Math.round(g * scale)),
+    Math.min(255, Math.round(b * scale)),
+    e + 128,
+  ];
+}
+
+// Minimal, uncompressed (non-RLE) Radiance HDR writer — three.js ships no
+// HDR/RGBE exporter, only HDRLoader/RGBELoader (read-only). A scanline width
+// under 8 is always treated as a flat, non-run-length-encoded buffer by the
+// reader regardless of any RLE markers (see RGBE_ReadPixels_RLE in
+// node_modules/three/examples/jsm/loaders/HDRLoader.js), so tiny fixtures can
+// skip implementing an RLE encoder — real full-size HDRIs (the bundled
+// public/environments/*.hdr, downloaded from Poly Haven) do use it.
+function writeHdr(outPath, width, height, pixelFn) {
+  const header = `#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y ${height} +X ${width}\n`;
+  const pixels = Buffer.alloc(width * height * 4);
+  let offset = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const [r, g, b, e] = encodeRgbePixel(...pixelFn(x, y));
+      pixels[offset++] = r;
+      pixels[offset++] = g;
+      pixels[offset++] = b;
+      pixels[offset++] = e;
+    }
+  }
+  fs.writeFileSync(outPath, Buffer.concat([Buffer.from(header, "ascii"), pixels]));
+}
+
+// fixture-day.hdr / fixture-night.hdr — tiny (2x2) synthetic HDR fixtures for
+// Viewer.test.ts's setLightingPreset() coverage. Not the real bundled
+// environments (see public/environments/*.hdr) — these just need to be
+// valid, distinguishable RGBE files small enough to check in, exercising the
+// real HDRLoader.parse() codepath (confirmed empirically to work under
+// jsdom — pure ArrayBuffer parsing, no image decode involved) without
+// needing real HDRI binaries in the fixture set.
+{
+  writeHdr(path.join(fixturesDir, "fixture-day.hdr"), 2, 2, () => [4, 3.5, 2.5]); // warm, bright
+  console.log("wrote src/test/fixtures/fixture-day.hdr");
+
+  writeHdr(path.join(fixturesDir, "fixture-night.hdr"), 2, 2, () => [0.05, 0.05, 0.15]); // cool, dim
+  console.log("wrote src/test/fixtures/fixture-night.hdr");
+}

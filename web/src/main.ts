@@ -1,5 +1,5 @@
 import "./style.css";
-import { Viewer } from "./viewer/Viewer";
+import { Viewer, type LightingPreset } from "./viewer/Viewer";
 import { filesFromDataTransfer } from "./viewer/DragDropFiles";
 
 function requireElement<T extends Element>(selector: string): T {
@@ -13,6 +13,8 @@ function requireElement<T extends Element>(selector: string): T {
 const canvas = requireElement<HTMLCanvasElement>("#viewer-canvas");
 const viewportRegion = requireElement<HTMLElement>("#viewport-region");
 const resetViewButton = requireElement<HTMLButtonElement>("#reset-view-button");
+const lightingPresetDayButton = requireElement<HTMLButtonElement>("#lighting-preset-day-button");
+const lightingPresetNightButton = requireElement<HTMLButtonElement>("#lighting-preset-night-button");
 const browseButton = requireElement<HTMLButtonElement>("#browse-button");
 const fileInput = requireElement<HTMLInputElement>("#file-input");
 const browseFolderButton = requireElement<HTMLButtonElement>("#browse-folder-button");
@@ -30,6 +32,19 @@ viewer.start();
 resetViewButton.addEventListener("click", () => {
   viewer.resetView();
 });
+
+function setLightingPresetButtonState(preset: LightingPreset): void {
+  lightingPresetDayButton.setAttribute("aria-pressed", String(preset === "day"));
+  lightingPresetNightButton.setAttribute("aria-pressed", String(preset === "night"));
+}
+
+async function applyLightingPreset(preset: LightingPreset): Promise<void> {
+  await viewer.setLightingPreset(preset);
+  setLightingPresetButtonState(preset);
+}
+
+lightingPresetDayButton.addEventListener("click", () => void applyLightingPreset("day"));
+lightingPresetNightButton.addEventListener("click", () => void applyLightingPreset("night"));
 
 window.addEventListener("resize", () => {
   viewer.resize(viewportRegion.clientWidth, viewportRegion.clientHeight);
@@ -90,11 +105,19 @@ viewportRegion.addEventListener("drop", (event) => {
   });
 });
 
-async function importShowcaseModel(): Promise<void> {
+async function fetchShowcaseModelFile(): Promise<File> {
   const url = `${import.meta.env.BASE_URL}models/showcase.glb`;
   const response = await fetch(url);
   const blob = await response.blob();
-  await importFiles([new File([blob], "showcase.glb", { type: "model/gltf-binary" })]);
+  return new File([blob], "showcase.glb", { type: "model/gltf-binary" });
 }
 
-void importShowcaseModel();
+// Day is the default Lighting preset on load. It's fetched/processed in
+// parallel with the showcase model, but the model is only added to the
+// scene (via importFiles) once lighting has resolved — HDRI image-based
+// lighting replaced the old always-on fallback lights (see issue #14), so
+// without this ordering the showcase model would render fully unlit/black
+// for a visible window right after import.
+void Promise.all([applyLightingPreset("day"), fetchShowcaseModelFile()]).then(([, showcaseFile]) =>
+  importFiles([showcaseFile]),
+);

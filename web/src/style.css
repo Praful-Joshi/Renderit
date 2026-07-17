@@ -140,6 +140,22 @@ body {
   padding: var(--space-md);
 }
 
+#lighting-preset-toggle {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+#lighting-preset-toggle button {
+  flex: 1;
+}
+
+#lighting-preset-toggle button[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
 button {
   font: inherit;
   cursor: pointer;

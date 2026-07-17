@@ -112,7 +112,7 @@ describe("Viewer", () => {
       expect(dayEnvironment).not.toBe(nightEnvironment);
     });
 
-    it("leaves scene.background untouched — the HDRI drives lighting/reflections only", async () => {
+    it("leaves scene.background untouched in the default studio Background mode", async () => {
       const { viewer } = createViewer();
       const backgroundBefore = viewer.scene.background;
 
@@ -120,6 +120,56 @@ describe("Viewer", () => {
       await viewer.setLightingPreset("night");
 
       expect(viewer.scene.background).toBe(backgroundBefore);
+    });
+  });
+
+  describe("setBackgroundMode", () => {
+    it("defaults to the studio background", () => {
+      const { viewer } = createViewer();
+
+      expect(viewer.backgroundMode).toBe("studio");
+      expect(viewer.scene.background).toBeInstanceOf(THREE.Color);
+    });
+
+    it("switches scene.background to the active Lighting preset's environment texture in hdri mode", async () => {
+      const { viewer } = createViewer();
+      await viewer.setLightingPreset("day");
+
+      viewer.setBackgroundMode("hdri");
+
+      expect(viewer.backgroundMode).toBe("hdri");
+      expect(viewer.scene.background).toBe(viewer.scene.environment);
+    });
+
+    it("reverts scene.background to the studio color when switched back to studio", async () => {
+      const { viewer } = createViewer();
+      await viewer.setLightingPreset("day");
+      viewer.setBackgroundMode("hdri");
+
+      viewer.setBackgroundMode("studio");
+
+      expect(viewer.backgroundMode).toBe("studio");
+      expect(viewer.scene.background).toBeInstanceOf(THREE.Color);
+    });
+
+    it("updates the visible hdri background when the Lighting preset changes while in hdri mode", async () => {
+      const { viewer } = createViewer();
+      await viewer.setLightingPreset("day");
+      viewer.setBackgroundMode("hdri");
+      const dayBackground = viewer.scene.background;
+
+      await viewer.setLightingPreset("night");
+
+      expect(viewer.scene.background).not.toBe(dayBackground);
+      expect(viewer.scene.background).toBe(viewer.scene.environment);
+    });
+
+    it("falls back to the studio color if hdri mode is requested before any Lighting preset has loaded", () => {
+      const { viewer } = createViewer();
+
+      viewer.setBackgroundMode("hdri");
+
+      expect(viewer.scene.background).toBeInstanceOf(THREE.Color);
     });
   });
 

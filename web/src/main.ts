@@ -1,5 +1,5 @@
 import "./style.css";
-import { Viewer, type LightingPreset } from "./viewer/Viewer";
+import { Viewer, type BackgroundMode, type LightingPreset } from "./viewer/Viewer";
 import { filesFromDataTransfer } from "./viewer/DragDropFiles";
 
 function requireElement<T extends Element>(selector: string): T {
@@ -15,6 +15,8 @@ const viewportRegion = requireElement<HTMLElement>("#viewport-region");
 const resetViewButton = requireElement<HTMLButtonElement>("#reset-view-button");
 const lightingPresetDayButton = requireElement<HTMLButtonElement>("#lighting-preset-day-button");
 const lightingPresetNightButton = requireElement<HTMLButtonElement>("#lighting-preset-night-button");
+const backgroundModeStudioButton = requireElement<HTMLButtonElement>("#background-mode-studio-button");
+const backgroundModeHdriButton = requireElement<HTMLButtonElement>("#background-mode-hdri-button");
 const browseButton = requireElement<HTMLButtonElement>("#browse-button");
 const fileInput = requireElement<HTMLInputElement>("#file-input");
 const browseFolderButton = requireElement<HTMLButtonElement>("#browse-folder-button");
@@ -45,6 +47,19 @@ async function applyLightingPreset(preset: LightingPreset): Promise<void> {
 
 lightingPresetDayButton.addEventListener("click", () => void applyLightingPreset("day"));
 lightingPresetNightButton.addEventListener("click", () => void applyLightingPreset("night"));
+
+function setBackgroundModeButtonState(mode: BackgroundMode): void {
+  backgroundModeStudioButton.setAttribute("aria-pressed", String(mode === "studio"));
+  backgroundModeHdriButton.setAttribute("aria-pressed", String(mode === "hdri"));
+}
+
+function applyBackgroundMode(mode: BackgroundMode): void {
+  viewer.setBackgroundMode(mode);
+  setBackgroundModeButtonState(mode);
+}
+
+backgroundModeStudioButton.addEventListener("click", () => applyBackgroundMode("studio"));
+backgroundModeHdriButton.addEventListener("click", () => applyBackgroundMode("hdri"));
 
 window.addEventListener("resize", () => {
   viewer.resize(viewportRegion.clientWidth, viewportRegion.clientHeight);

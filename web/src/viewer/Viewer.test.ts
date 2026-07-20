@@ -422,4 +422,68 @@ describe("Viewer", () => {
       expect(viewer.rotation).toEqual({ x: 0, y: 0, z: 0 });
     });
   });
+
+  describe("metadata", () => {
+    it("is null before any model is imported", () => {
+      const { viewer } = createViewer();
+
+      expect(viewer.metadata).toBeNull();
+    });
+
+    it("reflects the imported model's file info and structural counts (fixture-simple-box.glb: unit BoxGeometry, 1 mesh, 1 material, no textures)", async () => {
+      const { viewer } = createViewer();
+      const file = loadFixture("fixture-simple-box.glb", "model/gltf-binary");
+
+      await viewer.importModel(file);
+
+      expect(viewer.metadata).toEqual({
+        fileName: "fixture-simple-box.glb",
+        format: "glTF/GLB",
+        fileSizeBytes: file.size,
+        vertexCount: 24,
+        triangleCount: 12,
+        meshCount: 1,
+        materialCount: 1,
+        textureCount: 0,
+        boundingBoxSize: { width: 1, height: 1, depth: 1 },
+      });
+    });
+
+    it("replaces the previous model's metadata rather than accumulating it", async () => {
+      const { viewer } = createViewer();
+      await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+
+      const offsetFile = loadFixture("fixture-offset-box.glb", "model/gltf-binary");
+      await viewer.importModel(offsetFile);
+
+      // 2x4x2 box (see scripts/generate-test-assets.mjs) — distinct from the
+      // first import's 1x1x1, proving this reflects the current model.
+      expect(viewer.metadata?.fileName).toBe("fixture-offset-box.glb");
+      expect(viewer.metadata?.boundingBoxSize).toEqual({ width: 2, height: 4, depth: 2 });
+    });
+
+    it("reports total file size across every file in a multi-file import, not just the primary model file", async () => {
+      const { viewer } = createViewer();
+      const objFile = loadFixture("fixture-box.obj", "application/octet-stream");
+      const mtlFile = loadFixture("fixture-box.mtl", "application/octet-stream");
+
+      await viewer.importModel([objFile, mtlFile]);
+
+      expect(viewer.metadata?.fileSizeBytes).toBe(objFile.size + mtlFile.size);
+      expect(viewer.metadata?.fileName).toBe("fixture-box.obj");
+      expect(viewer.metadata?.format).toBe("OBJ");
+    });
+
+    it("leaves metadata untouched when importModel rejects", async () => {
+      const { viewer } = createViewer();
+      await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+      const metadataBefore = viewer.metadata;
+
+      await expect(viewer.importModel(loadFixture("fixture-unsupported.txt", "text/plain"))).rejects.toBeInstanceOf(
+        UnsupportedFormatError,
+      );
+
+      expect(viewer.metadata).toEqual(metadataBefore);
+    });
+  });
 });

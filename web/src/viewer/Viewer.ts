@@ -4,6 +4,7 @@ import { computeAutoFit } from "./AutoFit";
 import { resolveImportedFile } from "./ImportResolver";
 import { buildImportFileSet } from "./ImportFileSet";
 import { LightingPresetManager, PMREMEnvironmentProcessor, type LightingPreset } from "./LightingPresets";
+import { extractMetadata, type ModelMetadata } from "./MetadataExtractor";
 
 export type { LightingPreset } from "./LightingPresets";
 
@@ -83,6 +84,7 @@ export class Viewer {
   private autoOrientationQuaternion = new THREE.Quaternion();
   private userScale = 1;
   private userRotationDegrees: RotationDegrees = { x: 0, y: 0, z: 0 };
+  private currentMetadata: ModelMetadata | null = null;
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
@@ -164,6 +166,14 @@ export class Viewer {
    * importModel() call. */
   get rotation(): RotationDegrees {
     return { ...this.userRotationDegrees };
+  }
+
+  /** Structural/file info about the currently loaded model for the Metadata
+   * panel (issue #16), or null before the first successful importModel()
+   * call. Computed once per import by MetadataExtractor, not recomputed on
+   * every render. */
+  get metadata(): ModelMetadata | null {
+    return this.currentMetadata;
   }
 
   /**
@@ -272,11 +282,13 @@ export class Viewer {
    * or a folder-picker/drag-drop file list — see ImportFileSet. */
   async importModel(source: File | File[]): Promise<ImportModelResult> {
     const fileSet = await buildImportFileSet(source);
-    const { object, missingResources, objectUrls } = await resolveImportedFile(fileSet);
+    const { object, missingResources, objectUrls, fileName, format } = await resolveImportedFile(fileSet);
 
     // Measured before Viewer touches the object's transform, so this reflects
     // exactly what the loader itself produced — including any Auto-orientation
     // correction FBXLoader/ColladaLoader already baked into object.quaternion.
+    // Also the same pre-Auto-fit box MetadataExtractor uses for bounding-box
+    // dimensions, so those report the model's own file units.
     const box = new THREE.Box3().setFromObject(object);
     const { scale } = computeAutoFit(box);
 
@@ -293,6 +305,7 @@ export class Viewer {
     this.autoOrientationQuaternion = object.quaternion.clone();
     this.userScale = 1;
     this.userRotationDegrees = { x: 0, y: 0, z: 0 };
+    this.currentMetadata = extractMetadata({ object, box, files: fileSet, fileName, format });
 
     this.scene.add(object);
     this.currentModel = object;

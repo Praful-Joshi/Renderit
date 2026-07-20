@@ -19,6 +19,17 @@ const EXTENSION_TO_LOADER: Record<string, LoaderKind> = {
   dae: "collada",
 };
 
+/** Human-readable label for the Metadata panel's "format" field (issue #16)
+ * — kept here rather than duplicated, since this is the single place that
+ * already knows how a file extension maps to a format. */
+const LOADER_KIND_LABELS: Record<LoaderKind, string> = {
+  gltf: "glTF/GLB",
+  obj: "OBJ",
+  fbx: "FBX",
+  stl: "STL",
+  collada: "Collada",
+};
+
 export class UnsupportedFormatError extends Error {
   constructor(filename: string) {
     const supported = [...new Set(Object.keys(EXTENSION_TO_LOADER))].join(", ");
@@ -41,6 +52,11 @@ export interface ResolvedImport {
   /** Blob URLs created to satisfy resolved references, owned by the caller
    * to revoke once this model is replaced. */
   objectUrls: string[];
+  /** The primary model file's own name — e.g. the .obj, not a companion
+   * .mtl — for the Metadata panel (issue #16). */
+  fileName: string;
+  /** Human-readable format label for the Metadata panel (issue #16). */
+  format: string;
 }
 
 // Every format but STL can reference external resources (textures, a
@@ -129,5 +145,5 @@ export async function resolveImportedFile(files: ImportFileSet): Promise<Resolve
       throw new UnsupportedFormatError(primaryEntry.name);
   }
 
-  return { object, missingResources, objectUrls };
+  return { object, missingResources, objectUrls, fileName: primaryEntry.name, format: LOADER_KIND_LABELS[kind] };
 }

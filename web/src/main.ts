@@ -34,6 +34,15 @@ const fileInput = requireElement<HTMLInputElement>("#file-input");
 const browseFolderButton = requireElement<HTMLButtonElement>("#browse-folder-button");
 const folderInput = requireElement<HTMLInputElement>("#folder-input");
 const importError = requireElement<HTMLElement>("#import-error");
+const metadataFileName = requireElement<HTMLElement>("#metadata-file-name");
+const metadataFormat = requireElement<HTMLElement>("#metadata-format");
+const metadataFileSize = requireElement<HTMLElement>("#metadata-file-size");
+const metadataTriangleCount = requireElement<HTMLElement>("#metadata-triangle-count");
+const metadataVertexCount = requireElement<HTMLElement>("#metadata-vertex-count");
+const metadataMeshCount = requireElement<HTMLElement>("#metadata-mesh-count");
+const metadataMaterialCount = requireElement<HTMLElement>("#metadata-material-count");
+const metadataTextureCount = requireElement<HTMLElement>("#metadata-texture-count");
+const metadataDimensions = requireElement<HTMLElement>("#metadata-dimensions");
 
 const viewer = new Viewer({
   canvas,
@@ -107,12 +116,43 @@ window.addEventListener("resize", () => {
   viewer.resize(viewportRegion.clientWidth, viewportRegion.clientHeight);
 });
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+// The metadata panel just renders MetadataExtractor's output — per issue #9's
+// SettingsPanel/MetadataPanel decision, no state layer of its own.
+function renderMetadataPanel(): void {
+  const metadata = viewer.metadata;
+  if (!metadata) return;
+
+  metadataFileName.textContent = metadata.fileName;
+  metadataFormat.textContent = metadata.format;
+  metadataFileSize.textContent = formatFileSize(metadata.fileSizeBytes);
+  metadataTriangleCount.textContent = metadata.triangleCount.toLocaleString();
+  metadataVertexCount.textContent = metadata.vertexCount.toLocaleString();
+  metadataMeshCount.textContent = metadata.meshCount.toLocaleString();
+  metadataMaterialCount.textContent = metadata.materialCount.toLocaleString();
+  metadataTextureCount.textContent = metadata.textureCount.toLocaleString();
+  const { width, height, depth } = metadata.boundingBoxSize;
+  metadataDimensions.textContent = `${width.toFixed(2)} × ${height.toFixed(2)} × ${depth.toFixed(2)}`;
+}
+
 async function importFiles(files: File[]): Promise<void> {
   importError.hidden = true;
   importError.classList.remove("warning");
   try {
     const { missingResources } = await viewer.importModel(files);
     syncScaleRotationControls();
+    renderMetadataPanel();
     if (missingResources.length > 0) {
       importError.textContent = `Model loaded, but couldn't find: ${missingResources.join(", ")}`;
       importError.classList.add("warning");

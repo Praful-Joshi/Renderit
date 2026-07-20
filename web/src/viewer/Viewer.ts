@@ -33,6 +33,14 @@ export interface ImportModelResult {
  * setting — see web/CONTEXT.md's "Background mode". */
 export type BackgroundMode = "studio" | "hdri";
 
+export type RotationAxis = "x" | "y" | "z";
+
+export interface RotationDegrees {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface ViewerOptions {
   canvas: HTMLCanvasElement;
   /** Injectable for tests; defaults to a real THREE.WebGLRenderer. */
@@ -67,6 +75,14 @@ export class Viewer {
   private readonly studioBackgroundColor: THREE.Color;
   private activeLightingPreset: LightingPreset | null = null;
   private activeBackgroundMode: BackgroundMode = "studio";
+  // The Auto-fit scale and Auto-orientation rotation baked into the current
+  // model at import time — setScale()/setRotation() compose the visitor's
+  // manual adjustment on top of these rather than overwriting them, so the
+  // automatic framing/orientation is never reset or fought (issue #15).
+  private autoFitScale = 1;
+  private autoOrientationQuaternion = new THREE.Quaternion();
+  private userScale = 1;
+  private userRotationDegrees: RotationDegrees = { x: 0, y: 0, z: 0 };
 
   constructor(options: ViewerOptions) {
     const width = options.width || options.canvas.clientWidth || 1;
@@ -137,6 +153,19 @@ export class Viewer {
     return this.activeBackgroundMode;
   }
 
+  /** Manual scale multiplier on top of the Auto-fit baseline — see
+   * setScale(). Resets to 1 on every importModel() call. */
+  get scale(): number {
+    return this.userScale;
+  }
+
+  /** Manual rotation in degrees per axis, added on top of the
+   * Auto-orientation baseline — see setRotation(). Resets to zero on every
+   * importModel() call. */
+  get rotation(): RotationDegrees {
+    return { ...this.userRotationDegrees };
+  }
+
   /**
    * Switches scene.environment (lighting/reflections) to the given HDRI
    * Lighting preset, delegating the fetch/parse/PMREM/cache work to
@@ -177,6 +206,65 @@ export class Viewer {
         : this.studioBackgroundColor;
   }
 
+  /** Sets the currently loaded model's scale as a multiplier on top of the
+   * Auto-fit baseline captured at import time (1 = exactly Auto-fit's
+   * result). A no-op if no model is loaded yet. */
+  setScale(value: number): void {
+    this.userScale = value;
+    this.applyModelTransform();
+  }
+
+  /** Sets one axis of the currently loaded model's rotation, in degrees,
+   * added on top of the Auto-orientation baseline captured at import time
+   * (0 = exactly Auto-orientation's result) — independent of the other two
+   * axes. A no-op if no model is loaded yet. */
+  setRotation(axis: RotationAxis, degrees: number): void {
+    this.userRotationDegrees[axis] = degrees;
+    this.applyModelTransform();
+  }
+
+  /**
+   * Recomputes scale, rotation, and position together from the Auto-fit/
+   * Auto-orientation baseline plus the visitor's manual adjustments. Position
+   * has to be recomputed alongside scale/rotation, not left as Auto-fit set
+   * it — Auto-fit's centering only holds for the exact scale/rotation it was
+   * computed for, and the model's own local origin isn't always at its
+   * bounding-box center (e.g. fixture-offset-box.glb), so leaving position
+   * untouched would let the model visibly drift off-center as the sliders
+   * move. Re-measuring the box after applying scale/rotation (position held
+   * at the origin as a pivot) and centering on the result mirrors AutoFit's
+   * own approach, just re-run per adjustment instead of once at import —
+   * simpler and less error-prone than re-deriving the centering math for
+   * arbitrary combinations of Auto-orientation's baked-in rotation and the
+   * user's added rotation.
+   */
+  private applyModelTransform(): void {
+    if (!this.currentModel) return;
+    const model = this.currentModel;
+
+    const userRotation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        THREE.MathUtils.degToRad(this.userRotationDegrees.x),
+        THREE.MathUtils.degToRad(this.userRotationDegrees.y),
+        THREE.MathUtils.degToRad(this.userRotationDegrees.z),
+      ),
+    );
+
+    model.position.set(0, 0, 0);
+    // Order matters: Quaternion#multiply(q) composes as this * q, and
+    // applying (a * b) to a vector applies b first, a last — so
+    // autoOrientationQuaternion must be the right-hand operand (applied
+    // first, to raw mesh coordinates) and userRotation the left-hand one
+    // (applied last, on top of the already-corrected orientation). The
+    // reverse would rotate the user's slider input around the raw mesh's
+    // pre-correction axes instead of the axes actually displayed on screen.
+    model.quaternion.copy(userRotation).multiply(this.autoOrientationQuaternion);
+    model.scale.setScalar(this.autoFitScale * this.userScale);
+
+    const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+    model.position.copy(center).multiplyScalar(-1);
+  }
+
   /** Used for both the bundled showcase model on startup and visitor
    * imports, so there's exactly one code path for "a model is now on
    * screen" — rejecting leaves the current model untouched. `source` may be
@@ -186,10 +274,11 @@ export class Viewer {
     const fileSet = await buildImportFileSet(source);
     const { object, missingResources, objectUrls } = await resolveImportedFile(fileSet);
 
+    // Measured before Viewer touches the object's transform, so this reflects
+    // exactly what the loader itself produced — including any Auto-orientation
+    // correction FBXLoader/ColladaLoader already baked into object.quaternion.
     const box = new THREE.Box3().setFromObject(object);
-    const { scale, position } = computeAutoFit(box);
-    object.scale.setScalar(scale);
-    object.position.copy(position);
+    const { scale } = computeAutoFit(box);
 
     if (this.currentModel) {
       this.scene.remove(this.currentModel);
@@ -197,9 +286,18 @@ export class Viewer {
       this.currentModelObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     }
 
+    // New baseline for setScale()/setRotation() — a fresh import always
+    // starts at 1x/0° manual adjustment, regardless of what was dialed in
+    // for the previous model.
+    this.autoFitScale = scale;
+    this.autoOrientationQuaternion = object.quaternion.clone();
+    this.userScale = 1;
+    this.userRotationDegrees = { x: 0, y: 0, z: 0 };
+
     this.scene.add(object);
     this.currentModel = object;
     this.currentModelObjectUrls = objectUrls;
+    this.applyModelTransform();
 
     return { model: object, missingResources };
   }

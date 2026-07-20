@@ -297,4 +297,129 @@ describe("Viewer", () => {
       expect(missingResources).toEqual([]);
     });
   });
+
+  describe("setScale", () => {
+    it("is a no-op when no model has been imported yet", () => {
+      const { viewer } = createViewer();
+
+      expect(() => viewer.setScale(2)).not.toThrow();
+      expect(viewer.scale).toBe(2);
+    });
+
+    it("scales the model on top of the Auto-fit baseline rather than replacing it", async () => {
+      const { viewer } = createViewer();
+      const { model } = await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+      const autoFitScale = model.scale.x;
+
+      viewer.setScale(2);
+
+      expect(model.scale.x).toBeCloseTo(autoFitScale * 2);
+      expect(model.scale.y).toBeCloseTo(autoFitScale * 2);
+      expect(model.scale.z).toBeCloseTo(autoFitScale * 2);
+      expect(viewer.scale).toBe(2);
+    });
+
+    it("keeps the model centered at the origin as scale changes, even when its own local origin isn't at its bounding-box center", async () => {
+      const { viewer } = createViewer();
+      // Deliberately off-center local origin (2x4x2 box authored at (5,5,5) —
+      // see scripts/generate-test-assets.mjs) — stress-tests that position is
+      // recomputed from the new scale rather than left as Auto-fit set it.
+      const { model } = await viewer.importModel(loadFixture("fixture-offset-box.glb", "model/gltf-binary"));
+
+      viewer.setScale(1.5);
+
+      const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+      expect(center.length()).toBeLessThan(0.1);
+    });
+
+    it("resets to 1 (the Auto-fit baseline) when a new model is imported", async () => {
+      const { viewer } = createViewer();
+      await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+      viewer.setScale(2);
+
+      await viewer.importModel(loadFixture("fixture-offset-box.glb", "model/gltf-binary"));
+
+      expect(viewer.scale).toBe(1);
+    });
+  });
+
+  describe("setRotation", () => {
+    it("is a no-op when no model has been imported yet", () => {
+      const { viewer } = createViewer();
+
+      expect(() => viewer.setRotation("y", 45)).not.toThrow();
+      expect(viewer.rotation).toEqual({ x: 0, y: 45, z: 0 });
+    });
+
+    it("rotates on top of the Auto-orientation baseline — around the axis as currently displayed, not the raw mesh's pre-correction axis", async () => {
+      const { viewer } = createViewer();
+      // fixture-box-zup.fbx has a genuinely non-identity Auto-orientation
+      // baseline (FBXLoader's Z-up correction) — the case where composition
+      // order actually matters, since the two orders only coincide when the
+      // baseline is identity.
+      const { model } = await viewer.importModel(loadFixture("fixture-box-zup.fbx", "application/octet-stream"));
+      const baseQuaternion = model.quaternion.clone();
+      const rawPoint = new THREE.Vector3(1, 0, 0);
+
+      viewer.setRotation("y", 90);
+
+      // Computed independently of Viewer's own Quaternion#multiply call (via
+      // applyAxisAngle instead), so this can't be tautologically satisfied by
+      // whichever composition order the implementation happens to use: apply
+      // Auto-orientation first, THEN rotate the result 90° around the world Y
+      // axis — that's what "on top of" concretely means.
+      const expected = rawPoint
+        .clone()
+        .applyQuaternion(baseQuaternion)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(90));
+      const actual = rawPoint.clone().applyQuaternion(model.quaternion);
+
+      expect(actual.x).toBeCloseTo(expected.x);
+      expect(actual.y).toBeCloseTo(expected.y);
+      expect(actual.z).toBeCloseTo(expected.z);
+      expect(viewer.rotation).toEqual({ x: 0, y: 90, z: 0 });
+    });
+
+    it("adjusts each axis independently without the others fighting each other", async () => {
+      const { viewer } = createViewer();
+      await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+
+      viewer.setRotation("x", 30);
+      viewer.setRotation("y", 45);
+      viewer.setRotation("z", -20);
+      viewer.setRotation("y", 90); // overwrite y only — x/z should be unaffected
+
+      expect(viewer.rotation).toEqual({ x: 30, y: 90, z: -20 });
+    });
+
+    it("does not change the model's scale", async () => {
+      const { viewer } = createViewer();
+      const { model } = await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+      const scaleBefore = model.scale.clone();
+
+      viewer.setRotation("x", 45);
+
+      expect(model.scale.equals(scaleBefore)).toBe(true);
+    });
+
+    it("keeps the model centered at the origin as rotation changes, even when its own local origin isn't at its bounding-box center", async () => {
+      const { viewer } = createViewer();
+      const { model } = await viewer.importModel(loadFixture("fixture-offset-box.glb", "model/gltf-binary"));
+
+      viewer.setRotation("y", 45);
+
+      const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+      expect(center.length()).toBeLessThan(0.1);
+    });
+
+    it("resets to zero on every axis when a new model is imported", async () => {
+      const { viewer } = createViewer();
+      await viewer.importModel(loadFixture("fixture-simple-box.glb", "model/gltf-binary"));
+      viewer.setRotation("x", 45);
+
+      await viewer.importModel(loadFixture("fixture-offset-box.glb", "model/gltf-binary"));
+
+      expect(viewer.rotation).toEqual({ x: 0, y: 0, z: 0 });
+    });
+  });
 });

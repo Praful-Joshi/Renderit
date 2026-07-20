@@ -28,6 +28,34 @@
         <h1 class="brand">Renderit</h1>
         <section id="settings-panel">
           <h2>Settings</h2>
+          <div id="scale-control" class="settings-slider">
+            <div class="settings-slider-header">
+              <label for="scale-slider">Scale</label>
+              <output id="scale-value" for="scale-slider">1.00</output>
+            </div>
+            <input id="scale-slider" type="range" min="0.1" max="3" step="0.01" value="1" />
+          </div>
+          <div id="rotation-x-control" class="settings-slider">
+            <div class="settings-slider-header">
+              <label for="rotation-x-slider">Rotation X</label>
+              <output id="rotation-x-value" for="rotation-x-slider">0°</output>
+            </div>
+            <input id="rotation-x-slider" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div id="rotation-y-control" class="settings-slider">
+            <div class="settings-slider-header">
+              <label for="rotation-y-slider">Rotation Y</label>
+              <output id="rotation-y-value" for="rotation-y-slider">0°</output>
+            </div>
+            <input id="rotation-y-slider" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div id="rotation-z-control" class="settings-slider">
+            <div class="settings-slider-header">
+              <label for="rotation-z-slider">Rotation Z</label>
+              <output id="rotation-z-value" for="rotation-z-slider">0°</output>
+            </div>
+            <input id="rotation-z-slider" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
           <div id="lighting-preset-toggle" class="settings-toggle" role="group" aria-label="Lighting preset">
             <button id="lighting-preset-day-button" type="button" aria-pressed="true">Day</button>
             <button id="lighting-preset-night-button" type="button" aria-pressed="false">Night</button>

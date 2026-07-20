@@ -1,5 +1,5 @@
 import "./style.css";
-import { Viewer, type BackgroundMode, type LightingPreset } from "./viewer/Viewer";
+import { Viewer, type BackgroundMode, type LightingPreset, type RotationAxis } from "./viewer/Viewer";
 import { filesFromDataTransfer } from "./viewer/DragDropFiles";
 
 function requireElement<T extends Element>(selector: string): T {
@@ -17,6 +17,18 @@ const lightingPresetDayButton = requireElement<HTMLButtonElement>("#lighting-pre
 const lightingPresetNightButton = requireElement<HTMLButtonElement>("#lighting-preset-night-button");
 const backgroundModeStudioButton = requireElement<HTMLButtonElement>("#background-mode-studio-button");
 const backgroundModeHdriButton = requireElement<HTMLButtonElement>("#background-mode-hdri-button");
+const scaleSlider = requireElement<HTMLInputElement>("#scale-slider");
+const scaleValue = requireElement<HTMLOutputElement>("#scale-value");
+const rotationSliders: Record<RotationAxis, HTMLInputElement> = {
+  x: requireElement<HTMLInputElement>("#rotation-x-slider"),
+  y: requireElement<HTMLInputElement>("#rotation-y-slider"),
+  z: requireElement<HTMLInputElement>("#rotation-z-slider"),
+};
+const rotationValues: Record<RotationAxis, HTMLOutputElement> = {
+  x: requireElement<HTMLOutputElement>("#rotation-x-value"),
+  y: requireElement<HTMLOutputElement>("#rotation-y-value"),
+  z: requireElement<HTMLOutputElement>("#rotation-z-value"),
+};
 const browseButton = requireElement<HTMLButtonElement>("#browse-button");
 const fileInput = requireElement<HTMLInputElement>("#file-input");
 const browseFolderButton = requireElement<HTMLButtonElement>("#browse-folder-button");
@@ -61,6 +73,36 @@ function applyBackgroundMode(mode: BackgroundMode): void {
 backgroundModeStudioButton.addEventListener("click", () => applyBackgroundMode("studio"));
 backgroundModeHdriButton.addEventListener("click", () => applyBackgroundMode("hdri"));
 
+// Direct call-through on input, no intermediate state layer — per issue #9's
+// SettingsPanel decision and docs/adr/0004-web-ui-stack.md's "no framework,
+// direct control over the scene" rationale.
+scaleSlider.addEventListener("input", () => {
+  const value = Number(scaleSlider.value);
+  viewer.setScale(value);
+  scaleValue.textContent = value.toFixed(2);
+});
+
+for (const axis of Object.keys(rotationSliders) as RotationAxis[]) {
+  rotationSliders[axis].addEventListener("input", () => {
+    const degrees = Number(rotationSliders[axis].value);
+    viewer.setRotation(axis, degrees);
+    rotationValues[axis].textContent = `${degrees}°`;
+  });
+}
+
+// Viewer resets scale/rotation to their defaults on every import (a fresh
+// model's manual adjustments shouldn't carry over from the last one) — sync
+// the sliders/readouts to match after each successful import.
+function syncScaleRotationControls(): void {
+  scaleSlider.value = String(viewer.scale);
+  scaleValue.textContent = viewer.scale.toFixed(2);
+  for (const axis of Object.keys(rotationSliders) as RotationAxis[]) {
+    const degrees = viewer.rotation[axis];
+    rotationSliders[axis].value = String(degrees);
+    rotationValues[axis].textContent = `${degrees}°`;
+  }
+}
+
 window.addEventListener("resize", () => {
   viewer.resize(viewportRegion.clientWidth, viewportRegion.clientHeight);
 });
@@ -70,6 +112,7 @@ async function importFiles(files: File[]): Promise<void> {
   importError.classList.remove("warning");
   try {
     const { missingResources } = await viewer.importModel(files);
+    syncScaleRotationControls();
     if (missingResources.length > 0) {
       importError.textContent = `Model loaded, but couldn't find: ${missingResources.join(", ")}`;
       importError.classList.add("warning");

@@ -140,6 +140,31 @@ body {
   padding: var(--space-md);
 }
 
+.settings-slider {
+  margin-bottom: var(--space-md);
+}
+
+.settings-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-sm);
+  font-size: 0.85rem;
+}
+
+.settings-slider-header label {
+  color: var(--color-text-muted);
+}
+
+.settings-slider-header output {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
 .settings-toggle {
   display: flex;
   gap: var(--space-sm);

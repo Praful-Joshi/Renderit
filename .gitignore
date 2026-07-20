@@ -39,6 +39,7 @@ assets/textures/
 *.exr
 *.tga
 *.mtl
+models
 
 # Exception: keep small test assets if needed
 # !assets/test/**

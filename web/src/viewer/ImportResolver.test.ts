@@ -92,6 +92,29 @@ describe("resolveImportedFile", () => {
     expect(object.rotation.z).toBe(0);
   });
 
+  it.each([
+    { fixture: "fixture-simple-box.glb", expectedFormat: "glTF/GLB" },
+    { fixture: "fixture-box.stl", expectedFormat: "STL" },
+    { fixture: "fixture-box-zup.fbx", expectedFormat: "FBX" },
+    { fixture: "fixture-box-zup.dae", expectedFormat: "Collada" },
+  ])("reports the primary file's name and a human-readable format label for $fixture", async ({ fixture, expectedFormat }) => {
+    const files = loadFixtureSet([fixture]);
+
+    const { fileName, format } = await resolveImportedFile(files);
+
+    expect(fileName).toBe(fixture);
+    expect(format).toBe(expectedFormat);
+  });
+
+  it("reports the primary model file's name, not a companion .mtl's, for an OBJ+MTL import", async () => {
+    const files = loadFixtureSet(["fixture-box.obj", "fixture-box.mtl"]);
+
+    const { fileName, format } = await resolveImportedFile(files);
+
+    expect(fileName).toBe("fixture-box.obj");
+    expect(format).toBe("OBJ");
+  });
+
   it("rejects with UnsupportedFormatError for an unrecognized extension", async () => {
     const files = loadFixtureSet(["fixture-unsupported.txt"]);
 

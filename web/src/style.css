@@ -133,7 +133,7 @@ body {
   margin: 0 0 var(--space-sm);
 }
 
-#settings-panel {
+.sidebar-panel {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -179,6 +179,33 @@ body {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: #fff;
+}
+
+#metadata-list {
+  margin: 0;
+}
+
+.metadata-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.metadata-row:last-child {
+  border-bottom: none;
+}
+
+.metadata-row dt {
+  color: var(--color-text-muted);
+}
+
+.metadata-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 button {

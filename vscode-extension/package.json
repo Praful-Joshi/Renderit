@@ -1,0 +1,56 @@
+{
+  "name": "renderit-vscode",
+  "displayName": "Renderit 3D Viewer",
+  "description": "View 3D models (glTF/GLB, OBJ, FBX, STL, Collada) directly in VS Code.",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.57.0"
+  },
+  "categories": ["Visualization"],
+  "activationEvents": ["onCustomEditor:renderit.viewer"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "renderit.viewer",
+        "displayName": "Renderit 3D Viewer",
+        "selector": [
+          { "filenamePattern": "*.gltf" },
+          { "filenamePattern": "*.glb" },
+          { "filenamePattern": "*.obj" },
+          { "filenamePattern": "*.fbx" },
+          { "filenamePattern": "*.stl" },
+          { "filenamePattern": "*.dae" }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "compile:test": "tsc -p tsconfig.test.json",
+    "build:webview": "vite build",
+    "copy-assets": "node scripts/copy-assets.mjs",
+    "build": "npm run compile && npm run build:webview && npm run copy-assets",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.webview.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "npm run build && npm run compile:test && vscode-test"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.1.1",
+    "@types/three": "^0.185.1",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

@@ -58,6 +58,17 @@ web/dist/
 !web/src/test/fixtures/**
 
 # ─────────────────────────────────────────
+#  VS Code extension (Node/Vite project)
+# ─────────────────────────────────────────
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/dist/
+vscode-extension/.vscode-test/
+
+# Test fixtures, same exception as the web viewer above.
+!vscode-extension/test/fixtures/**
+
+# ─────────────────────────────────────────
 #  VS Code
 # ─────────────────────────────────────────
 .vscode/*

@@ -1,11 +1,11 @@
 # Web Viewer
 
-A browser-based 3D model viewer built in Three.js/TypeScript, distinct from the native `src/` renderer (see `docs/adr/0001-web-viewer-is-a-threejs-rewrite.md`). Ships first as a GitHub Pages website, later reused as the core of a browser extension popup.
+A browser-based 3D model viewer built in Three.js/TypeScript, distinct from the native `src/` renderer (see `docs/adr/0001-web-viewer-is-a-threejs-rewrite.md`). Ships first as a GitHub Pages website, later reused as the core of a VS Code extension (see `docs/adr/0005-fast-follow-is-vscode-extension-not-browser-extension.md`).
 
 ## Language
 
 **Viewer**:
-The reusable core component (scene, camera, renderer, lighting, controls) that both the website and the future browser extension embed. Not tied to either shell.
+The reusable core component (scene, camera, renderer, lighting, controls) that both the website and the VS Code extension's webview embed. Not tied to either shell.
 _Avoid_: App, renderer (ambiguous with the native `src/` renderer), engine.
 
 **Import**:

@@ -8,8 +8,8 @@
     "vscode": "^1.57.0"
   },
   "categories": ["Visualization"],
-  "activationEvents": ["onCustomEditor:renderit.viewer"],
-  "main": "./out/extension.js",
+  "activationEvents": ["onCustomEditor:renderit.viewer", "onCommand:renderit.openWithRenderit"],
+  "main": "./out/src/extension.js",
   "contributes": {
     "customEditors": [
       {
@@ -25,7 +25,22 @@
         ],
         "priority": "default"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "renderit.openWithRenderit",
+        "title": "Open with Renderit"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "renderit.openWithRenderit",
+          "when": "explorerResourceIsFolder || resourceExtname == .zip",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p tsconfig.json",

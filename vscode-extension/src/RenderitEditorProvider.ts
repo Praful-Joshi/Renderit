@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getNonce, getWebviewHtml } from "./getWebviewHtml";
+import { onRenderitWebviewReady, readFileBytes, renderRenderitWebview, uriBasename } from "./renderitWebview";
 
 /** No in-memory content of its own — the model's bytes are read fresh and
  * relayed to the webview in resolveCustomEditor, since the webview sandbox
@@ -27,42 +27,12 @@ export class RenderitEditorProvider implements vscode.CustomReadonlyEditorProvid
   }
 
   async resolveCustomEditor(document: RenderitDocument, webviewPanel: vscode.WebviewPanel): Promise<void> {
-    const distUri = vscode.Uri.joinPath(this.extensionUri, "dist");
-    webviewPanel.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [distUri],
-    };
+    renderRenderitWebview(webviewPanel.webview, this.extensionUri);
 
-    const webview = webviewPanel.webview;
-    const nonce = getNonce();
-    webview.html = getWebviewHtml({
-      scriptUri: webview.asWebviewUri(vscode.Uri.joinPath(distUri, "main.js")).toString(),
-      styleUri: webview.asWebviewUri(vscode.Uri.joinPath(distUri, "main.css")).toString(),
-      assetBaseUri: webview.asWebviewUri(distUri).toString(),
-      cspSource: webview.cspSource,
-      nonce,
-    });
-
-    // The webview signals readiness once its message listener is attached —
-    // postMessage delivery to a not-yet-listening webview is best-effort, not
-    // guaranteed (docs/research/vscode-webview-constraints.md §3), so the
-    // host waits for this handshake rather than posting immediately.
-    const subscription = webview.onDidReceiveMessage(async (message: { type?: string }) => {
-      if (message?.type !== "ready") return;
-      await this.postModelFile(document.uri, webview);
+    const subscription = onRenderitWebviewReady(webviewPanel.webview, async () => {
+      const bytes = await readFileBytes(document.uri);
+      await webviewPanel.webview.postMessage({ type: "openFile", fileName: uriBasename(document.uri), bytes });
     });
     webviewPanel.onDidDispose(() => subscription.dispose());
-  }
-
-  private async postModelFile(uri: vscode.Uri, webview: vscode.Webview): Promise<void> {
-    // Rewrapped in a fresh Uint8Array — workspace.fs.readFile's result is a
-    // Buffer in practice despite its Uint8Array typing, and only a "real"
-    // Uint8Array gets postMessage's fast ArrayBuffer transfer path (requires
-    // engines.vscode >=1.57, declared in package.json) rather than silently
-    // falling back to ~10x-slower serialization — see
-    // docs/research/vscode-webview-constraints.md §4.
-    const bytes = new Uint8Array(await vscode.workspace.fs.readFile(uri));
-    const fileName = uri.path.split("/").pop() ?? uri.path;
-    await webview.postMessage({ type: "openFile", fileName, bytes });
   }
 }

@@ -2,6 +2,7 @@ import "../../web/src/style.css";
 import * as THREE from "three";
 import { Viewer, type BackgroundMode, type LightingPreset, type RotationAxis } from "../../web/src/viewer/Viewer";
 import { LightingPresetManager, PMREMEnvironmentProcessor } from "../../web/src/viewer/LightingPresets";
+import { filesFromRelayedEntries, type RelayedFileEntry } from "./filesFromRelayedEntries";
 
 declare global {
   interface Window {
@@ -162,11 +163,11 @@ function renderMetadataPanel(): void {
   metadataDimensions.textContent = `${width.toFixed(2)} × ${height.toFixed(2)} × ${depth.toFixed(2)}`;
 }
 
-async function importFile(file: File): Promise<void> {
+async function importFiles(source: File | File[]): Promise<void> {
   importError.hidden = true;
   importError.classList.remove("warning");
   try {
-    const { missingResources } = await viewer.importModel(file);
+    const { missingResources } = await viewer.importModel(source);
     syncScaleRotationControls();
     renderMetadataPanel();
     if (missingResources.length > 0) {
@@ -197,11 +198,23 @@ interface OpenFileMessage {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
-window.addEventListener("message", (event: MessageEvent<OpenFileMessage>) => {
+/** Folder (and, via ImportFileSet's own zip detection, zip-relayed-as-one-file
+ * only reuses OpenFileMessage) imports arrive as multiple relayed entries —
+ * see src/openWithRenderit.ts (issue #29). */
+interface OpenFilesMessage {
+  type: "openFiles";
+  files: RelayedFileEntry[];
+}
+
+window.addEventListener("message", (event: MessageEvent<OpenFileMessage | OpenFilesMessage>) => {
   const message = event.data;
-  if (message?.type !== "openFile") return;
-  const file = new File([message.bytes], message.fileName);
-  void lightingPresetReady.then(() => importFile(file));
+  if (message?.type === "openFile") {
+    const file = new File([message.bytes], message.fileName);
+    void lightingPresetReady.then(() => importFiles(file));
+  } else if (message?.type === "openFiles") {
+    const files = filesFromRelayedEntries(message.files);
+    void lightingPresetReady.then(() => importFiles(files));
+  }
 });
 
 // Signals the host that the message listener above is attached — the host

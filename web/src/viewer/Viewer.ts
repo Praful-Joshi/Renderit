@@ -316,13 +316,22 @@ export class Viewer {
   }
 
   resetView(): void {
+    this.setCameraPose(this.initialCameraPosition, this.initialControlsTarget);
+  }
+
+  /** Directly sets the camera position/orbit target — e.g. restoring a
+   * previously-persisted pose (issue #30). Shares resetView()'s own
+   * auto-rotate suppression rather than duplicating it, since the same
+   * gotcha applies to any direct pose assignment, not just resetting to the
+   * initial framing. */
+  setCameraPose(position: THREE.Vector3Like, target: THREE.Vector3Like): void {
     // Suppress auto-rotate for this one sync call — otherwise update() applies
     // an auto-rotate tick (based on wall-clock time elapsed since the last
-    // call) on top of the restored pose, making the reset inexact.
+    // call) on top of the newly-set pose, making it inexact.
     const wasAutoRotating = this.controls.autoRotate;
     this.controls.autoRotate = false;
-    this.camera.position.copy(this.initialCameraPosition);
-    this.controls.target.copy(this.initialControlsTarget);
+    this.camera.position.copy(position);
+    this.controls.target.copy(target);
     this.controls.update();
     this.controls.autoRotate = wasAutoRotating;
   }

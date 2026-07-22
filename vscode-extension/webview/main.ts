@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { Viewer, type BackgroundMode, type LightingPreset, type RotationAxis } from "../../web/src/viewer/Viewer";
 import { LightingPresetManager, PMREMEnvironmentProcessor } from "../../web/src/viewer/LightingPresets";
 import { filesFromRelayedEntries, type RelayedFileEntry } from "./filesFromRelayedEntries";
+import { capturePersistedState, restoreCameraPose, restoreScaleAndRotation, type PersistedState } from "./persistedState";
 
 declare global {
   interface Window {
@@ -12,12 +13,21 @@ declare global {
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
+  getState(): unknown;
+  setState(state: unknown): void;
 }
 declare function acquireVsCodeApi(): VsCodeApi;
 
 // Called exactly once per webview session, per VS Code's API contract (a
 // second call throws) — see docs/research/vscode-webview-constraints.md §3.
 const vscodeApi = acquireVsCodeApi();
+
+// Set on a previous session, before this hide/show cycle destroyed and
+// recreated the webview's script context — see persistedState.ts for why
+// the *model* doesn't need to be part of this (the host re-relays it
+// unprompted) and why camera restoration doesn't wait for scale/rotation
+// restoration (issue #30).
+const persistedState = vscodeApi.getState() as PersistedState | undefined;
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -77,8 +87,23 @@ const viewer = new Viewer({
 
 viewer.start();
 
+// Independent of any model being loaded — see persistedState.ts.
+if (persistedState) {
+  restoreCameraPose(viewer, persistedState);
+}
+
+// getState/setState, not retainContextWhenHidden — VS Code's own docs
+// describe the latter as having "high memory overhead" and recommend it
+// only when other persistence techniques don't work (issue #30).
+function persistState(): void {
+  vscodeApi.setState(capturePersistedState(viewer));
+}
+
+viewer.controls.addEventListener("end", persistState);
+
 resetViewButton.addEventListener("click", () => {
   viewer.resetView();
+  persistState();
 });
 
 function setLightingPresetButtonState(preset: LightingPreset): void {
@@ -91,8 +116,8 @@ async function applyLightingPreset(preset: LightingPreset): Promise<void> {
   setLightingPresetButtonState(preset);
 }
 
-lightingPresetDayButton.addEventListener("click", () => void applyLightingPreset("day"));
-lightingPresetNightButton.addEventListener("click", () => void applyLightingPreset("night"));
+lightingPresetDayButton.addEventListener("click", () => void applyLightingPreset("day").then(persistState));
+lightingPresetNightButton.addEventListener("click", () => void applyLightingPreset("night").then(persistState));
 
 function setBackgroundModeButtonState(mode: BackgroundMode): void {
   backgroundModeStudioButton.setAttribute("aria-pressed", String(mode === "studio"));
@@ -104,13 +129,20 @@ function applyBackgroundMode(mode: BackgroundMode): void {
   setBackgroundModeButtonState(mode);
 }
 
-backgroundModeStudioButton.addEventListener("click", () => applyBackgroundMode("studio"));
-backgroundModeHdriButton.addEventListener("click", () => applyBackgroundMode("hdri"));
+backgroundModeStudioButton.addEventListener("click", () => {
+  applyBackgroundMode("studio");
+  persistState();
+});
+backgroundModeHdriButton.addEventListener("click", () => {
+  applyBackgroundMode("hdri");
+  persistState();
+});
 
 scaleSlider.addEventListener("input", () => {
   const value = Number(scaleSlider.value);
   viewer.setScale(value);
   scaleValue.textContent = value.toFixed(2);
+  persistState();
 });
 
 for (const axis of Object.keys(rotationSliders) as RotationAxis[]) {
@@ -118,6 +150,7 @@ for (const axis of Object.keys(rotationSliders) as RotationAxis[]) {
     const degrees = Number(rotationSliders[axis].value);
     viewer.setRotation(axis, degrees);
     rotationValues[axis].textContent = `${degrees}°`;
+    persistState();
   });
 }
 
@@ -168,6 +201,17 @@ async function importFiles(source: File | File[]): Promise<void> {
   importError.classList.remove("warning");
   try {
     const { missingResources } = await viewer.importModel(source);
+    // A fresh import always resets scale/rotation to their 1x/0° baseline
+    // (see Viewer.importModel's own comment) — restore the persisted
+    // adjustment on top of that reset, not before it. Background mode is
+    // restored separately, as soon as lighting resolves rather than waiting
+    // on import (see below) — gating it here would flash the studio default
+    // for however long import/parsing takes, since setLightingPreset()
+    // applies whatever backgroundMode is currently active (still the
+    // "studio" default at that point) internally, before import even starts.
+    if (persistedState) {
+      restoreScaleAndRotation(viewer, persistedState);
+    }
     syncScaleRotationControls();
     renderMetadataPanel();
     if (missingResources.length > 0) {
@@ -181,12 +225,26 @@ async function importFiles(source: File | File[]): Promise<void> {
   }
 }
 
-// Day is the default Lighting preset — started immediately (independent of
-// the opened file arriving) but the model is only added to the scene once
-// lighting has resolved, mirroring web/src/main.ts's own ordering: HDRI
-// image-based lighting replaced the always-on fallback lights (issue #14),
-// so without this ordering the model would render unlit for a visible window.
-const lightingPresetReady = applyLightingPreset("day");
+// Day is the default Lighting preset (or the persisted one, if this is a
+// rehydration after the webview was hidden and shown again — issue #30) —
+// started immediately (independent of the opened file arriving) but the
+// model is only added to the scene once lighting has resolved, mirroring
+// web/src/main.ts's own ordering: HDRI image-based lighting replaced the
+// always-on fallback lights (issue #14), so without this ordering the model
+// would render unlit for a visible window.
+//
+// Background mode restoration is chained here, not inside importFiles —
+// setLightingPreset() applies whatever backgroundMode is currently active
+// internally as soon as it resolves (still "studio", the Viewer default,
+// until this runs), independent of whether/how long import subsequently
+// takes. Restoring it later (gated on import) would flash the wrong
+// background for that whole window — exactly the "visible reload flash"
+// issue #30's acceptance criteria rules out.
+const lightingPresetReady = applyLightingPreset(persistedState?.lightingPreset ?? "day").then(() => {
+  if (persistedState) {
+    applyBackgroundMode(persistedState.backgroundMode);
+  }
+});
 
 interface OpenFileMessage {
   type: "openFile";

@@ -88,6 +88,29 @@ describe("Viewer", () => {
     expect(viewer.controls.target.equals(initialTarget)).toBe(true);
   });
 
+  it("setCameraPose() sets the camera position and controls target directly (issue #30)", () => {
+    const { viewer } = createViewer();
+
+    viewer.setCameraPose({ x: 7, y: 8, z: 9 }, { x: 1, y: 1, z: 1 });
+
+    expect(viewer.camera.position.x).toBeCloseTo(7);
+    expect(viewer.camera.position.y).toBeCloseTo(8);
+    expect(viewer.camera.position.z).toBeCloseTo(9);
+    expect(viewer.controls.target.x).toBeCloseTo(1);
+    expect(viewer.controls.target.y).toBeCloseTo(1);
+    expect(viewer.controls.target.z).toBeCloseTo(1);
+  });
+
+  it("setCameraPose() doesn't let idle auto-rotate nudge the newly-set pose off-target", () => {
+    const { viewer } = createViewer();
+    expect(viewer.controls.autoRotate).toBe(true); // still idle-rotating pre-first-interaction
+
+    viewer.setCameraPose({ x: 3, y: 3, z: 3 }, { x: 0, y: 0, z: 0 });
+
+    expect(viewer.camera.position.x).toBeCloseTo(3);
+    expect(viewer.controls.autoRotate).toBe(true); // restored afterward, not left permanently off
+  });
+
   describe("setLightingPreset", () => {
     it("processes and binds the day environment map", async () => {
       const { viewer, environmentProcessor } = createViewer();

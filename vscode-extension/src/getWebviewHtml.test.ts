@@ -18,9 +18,36 @@ describe("getWebviewHtml", () => {
     expect(html).toContain(`script-src 'nonce-${options.nonce}'`);
   });
 
-  it("allows blob: image sources — ResourceResolver.ts resolves textures via URL.createObjectURL", () => {
+  it("allows blob:/data: image sources — ResourceResolver.ts resolves textures via URL.createObjectURL", () => {
     const html = getWebviewHtml(options);
     expect(html).toMatch(/img-src[^;]*\bblob:/);
+    expect(html).toMatch(/img-src[^;]*\bdata:/);
+  });
+
+  // Regression: an earlier version only allowlisted `connect-src ${cspSource}`,
+  // which silently blocked every fetch() call GLTFLoader/THREE's
+  // LoadingManager make to load a buffer/texture referenced by blob: (an
+  // external file resolved via ResourceResolver's createObjectURL) or data:
+  // (an embedded base64 buffer) — manifesting as "Failed to load buffer"
+  // for any multi-file model or one with an embedded data URI, with no CSP
+  // violation surfaced to the user (only single-file, fully self-contained
+  // binary formats like .glb happened to avoid the extra fetch and render).
+  it("allows blob:/data: fetches — GLTFLoader fetches referenced buffers/textures by URL, not just <img> src", () => {
+    const html = getWebviewHtml(options);
+    expect(html).toMatch(/connect-src[^;]*\bblob:/);
+    expect(html).toMatch(/connect-src[^;]*\bdata:/);
+  });
+
+  // Regression: without an explicit worker-src, it falls back to script-src
+  // (nonce-only) — fflate's async unzip() (ImportFileSet.ts's extractZip)
+  // creates a Worker from a blob: URL to decompress off the main thread,
+  // which CSP silently blocked with no catchable JS error (just a console
+  // warning), hanging forever on any zip large enough for fflate to bother
+  // using a worker at all. A nonce can't apply to worker construction the
+  // way it does to a <script> tag, so this needs its own directive.
+  it("allows blob: workers — fflate's async unzip() decompresses off the main thread via a blob: Worker", () => {
+    const html = getWebviewHtml(options);
+    expect(html).toMatch(/worker-src[^;]*\bblob:/);
   });
 
   it("never allows unsafe-inline/unsafe-eval scripts", () => {

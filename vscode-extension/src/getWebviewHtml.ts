@@ -28,7 +28,7 @@ export function getWebviewHtml({ scriptUri, styleUri, cspSource, nonce, assetBas
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; img-src ${cspSource} blob: data:; connect-src ${cspSource}; script-src 'nonce-${nonce}'; style-src ${cspSource};"
+      content="default-src 'none'; img-src ${cspSource} blob: data:; connect-src ${cspSource} blob: data:; script-src 'nonce-${nonce}'; style-src ${cspSource}; worker-src blob:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Renderit</title>

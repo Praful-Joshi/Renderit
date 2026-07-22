@@ -5,7 +5,7 @@
     "module": "node16",
     "moduleResolution": "node16",
     "outDir": "out",
-    "rootDir": "src",
+    "rootDir": ".",
     "sourceMap": true,
     "strict": true,
     "noUnusedLocals": true,

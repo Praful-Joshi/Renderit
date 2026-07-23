@@ -117,8 +117,11 @@ suite("Renderit 'Open with Renderit' command", () => {
   // #29's "spike and document" acceptance criterion: measures the host-side
   // recursive-read cost directly (the part under this extension's own
   // control, and the most plausible place a large import could hang) against
-  // a ~10MB/6-file fixture — see the PR description for the observed number.
-  test("collects a ~10MB/6-file folder without hanging (spike measurement)", async () => {
+  // a ~2MB/3-file fixture — see the PR description for the observed number.
+  // (Originally ~10MB/6 files; shrunk since the spike already proved "no
+  // hang" at that size and there's no value in the repo permanently carrying
+  // 10MB of meaningless random bytes to keep re-proving the same point.)
+  test("collects a ~2MB/3-file folder without hanging (spike measurement)", async () => {
     const uri = vscode.Uri.file(path.join(fixturesDir(), "folder-large-payload"));
 
     const start = Date.now();
@@ -128,8 +131,8 @@ suite("Renderit 'Open with Renderit' command", () => {
     const totalBytes = files.reduce((sum, file) => sum + file.bytes.byteLength, 0);
     console.log(`[spike] collectFolderFiles: ${files.length} files, ${totalBytes} bytes, ${elapsedMs}ms`);
 
-    assert.strictEqual(files.length, 6);
-    assert.ok(totalBytes > 9 * 1024 * 1024, `expected >9MB total, got ${totalBytes} bytes`);
+    assert.strictEqual(files.length, 3);
+    assert.ok(totalBytes > 1.9 * 1024 * 1024, `expected >1.9MB total, got ${totalBytes} bytes`);
     assert.ok(elapsedMs < 5000, `expected the folder walk to finish in under 5s, took ${elapsedMs}ms`);
   });
 });

@@ -1,0 +1,39 @@
+# Controls what actually ships inside the packaged .vsix — independent of
+# what's tracked in git. This project has two real runtime outputs (not the
+# usual single-bundle case): `out/` is the extension-host entry point
+# package.json's "main" actually loads, and `dist/` is the Vite-bundled
+# webview. Both ship. Only the .ts sources those are built from, plus
+# everything test/dev-only, get excluded.
+
+# TypeScript sources (compiled into out/ and dist/ already)
+src/**/*.ts
+webview/**/*.ts
+shared/**/*.ts
+**/*.map
+
+# Tests — never shipped, including their compiled output (tsconfig.json's
+# "include": ["src"] sweeps up src/*.test.ts alongside the real host code,
+# so the compiled .test.js has to be excluded here explicitly too, not just
+# the .ts source)
+test/**
+**/*.test.js
+.vscode-test/**
+.vscode-test.mjs
+
+# Dev/build-only config and scripts
+.vscode/**
+tsconfig.json
+tsconfig.test.json
+tsconfig.webview.json
+vite.config.ts
+scripts/**
+
+# Dependency metadata — node_modules itself isn't needed (everything runtime
+# needs is already bundled into dist/, and out/'s few runtime imports resolve
+# against `vscode` which VS Code provides), lockfile isn't useful to ship
+node_modules/**
+package-lock.json
+
+# Misc
+.gitignore
+**/.DS_Store

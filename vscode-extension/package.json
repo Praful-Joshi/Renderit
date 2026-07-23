@@ -3,7 +3,30 @@
   "displayName": "Renderit 3D Viewer",
   "description": "View 3D models (glTF/GLB, OBJ, FBX, STL, Collada) directly in VS Code.",
   "version": "0.1.0",
-  "private": true,
+  "publisher": "REPLACE_WITH_YOUR_MARKETPLACE_PUBLISHER_ID",
+  "icon": "icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Praful-Joshi/Renderit.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/Praful-Joshi/Renderit/issues"
+  },
+  "homepage": "https://github.com/Praful-Joshi/Renderit/tree/main/vscode-extension#readme",
+  "keywords": [
+    "3d",
+    "3d viewer",
+    "gltf",
+    "glb",
+    "obj",
+    "fbx",
+    "stl",
+    "collada",
+    "model viewer",
+    "three.js"
+  ],
   "engines": {
     "vscode": "^1.57.0"
   },
@@ -60,7 +83,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.1",
     "@types/three": "^0.185.1",
-    "@types/vscode": "^1.125.0",
+    "@types/vscode": "^1.57.1",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "jsdom": "^29.1.1",

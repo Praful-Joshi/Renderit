@@ -1,0 +1,49 @@
+name: Test VS Code extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "vscode-extension/**"
+      - "web/src/viewer/**"
+      - ".github/workflows/test-vscode-extension.yml"
+  pull_request:
+    paths:
+      - "vscode-extension/**"
+      - "web/src/viewer/**"
+      - ".github/workflows/test-vscode-extension.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: vscode-extension
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: vscode-extension
+        run: npm test
+
+      - name: Build
+        working-directory: vscode-extension
+        run: npm run build
+
+      # @vscode/test-electron launches a real (headless) VS Code instance,
+      # which needs a display server on Linux CI runners — xvfb-run provides
+      # a virtual one. Standard pattern for this tool on GitHub Actions.
+      - name: Integration tests
+        working-directory: vscode-extension
+        run: xvfb-run -a npm run test:integration

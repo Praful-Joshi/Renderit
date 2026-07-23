@@ -26,8 +26,8 @@ OpenGLRenderer
 #  Assets (large files — track with Git LFS
 #  or keep out of repo entirely)
 # ─────────────────────────────────────────
-assets/models/
-assets/textures/
+educational/assets/models/
+educational/assets/textures/
 *.obj
 *.fbx
 *.blend
@@ -41,8 +41,11 @@ assets/textures/
 *.mtl
 models
 
-# Exception: keep small test assets if needed
-# !assets/test/**
+# Exceptions: the extension's own icon and README screenshots aren't the
+# native renderer's vendored assets the ignores above target — they're small,
+# deliberately-committed docs/marketplace assets.
+!vscode-extension/icon.png
+!docs/images/**
 
 # ─────────────────────────────────────────
 #  Web viewer (Node/Vite project)
@@ -64,9 +67,15 @@ vscode-extension/node_modules/
 vscode-extension/out/
 vscode-extension/dist/
 vscode-extension/.vscode-test/
+vscode-extension/*.vsix
 
 # Test fixtures, same exception as the web viewer above.
 !vscode-extension/test/fixtures/**
+
+# ...but not personal/scratch test assets someone drops in that same folder —
+# re-ignored explicitly so a broad `git add` can't sweep up a large local
+# test file (e.g. a real-world model zip used for manual testing).
+vscode-extension/test/fixtures/bedroom.zip
 
 # ─────────────────────────────────────────
 #  VS Code
@@ -102,4 +111,4 @@ vscode-extension/.vscode-test/
 #  GLAD is an exception — it's generated source
 #  that belongs in the repo
 # ─────────────────────────────────────────
-# external/         ← do NOT ignore, GLAD lives here
+# educational/external/  ← do NOT ignore, GLAD lives here

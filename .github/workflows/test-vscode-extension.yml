@@ -23,10 +23,25 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: vscode-extension/package-lock.json
+          cache-dependency-path: |
+            vscode-extension/package-lock.json
+            web/package-lock.json
 
       - name: Install dependencies
         working-directory: vscode-extension
+        run: npm ci
+
+      # vscode-extension's tsconfig.webview.json and vite.config.ts both
+      # pull in web/src/viewer/**/*.ts directly and unmodified (see
+      # CONTEXT-MAP.md) — those files' bare "three"/"fflate" imports resolve
+      # via Node's module resolution relative to *their own* location, which
+      # means web/node_modules has to actually exist, not just
+      # vscode-extension's own copy of the same packages. Every local dev
+      # run happened to have both projects' node_modules already installed
+      # from unrelated work, which masked this on a fresh checkout — this
+      # step makes that implicit dependency explicit.
+      - name: Install web/ dependencies (consumed directly by the webview)
+        working-directory: web
         run: npm ci
 
       - name: Typecheck

@@ -28,6 +28,12 @@ tsconfig.webview.json
 vite.config.ts
 scripts/**
 
+# README demo GIFs — the `repository` field in package.json makes vsce rewrite
+# these relative links to raw.githubusercontent.com at package time, so the
+# Marketplace listing renders them straight from GitHub. They don't need to
+# ship inside the .vsix itself (would add ~6.7MB for no runtime benefit).
+docs/**
+
 # Dependency metadata — node_modules itself isn't needed (everything runtime
 # needs is already bundled into dist/, and out/'s few runtime imports resolve
 # against `vscode` which VS Code provides), lockfile isn't useful to ship

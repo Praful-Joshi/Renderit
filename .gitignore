@@ -112,3 +112,5 @@ vscode-extension/test/fixtures/bedroom.zip
 #  that belongs in the repo
 # ─────────────────────────────────────────
 # educational/external/  ← do NOT ignore, GLAD lives here
+
+/project_secrets

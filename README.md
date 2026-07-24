@@ -7,11 +7,9 @@ View glTF/GLB, OBJ, FBX, STL, and Collada models directly inside VS Code — sin
 [![CI](https://github.com/Praful-Joshi/Renderit/actions/workflows/test-vscode-extension.yml/badge.svg)](https://github.com/Praful-Joshi/Renderit/actions/workflows/test-vscode-extension.yml)
 [![License: MIT](https://img.shields.io/github/license/Praful-Joshi/Renderit)](LICENSE)
 
-**[VS Code Marketplace](#) (coming soon)** · **[Try the web viewer](https://praful-joshi.github.io/Renderit/)** · **[Quickstart](#quickstart)**
+**[VS Code Marketplace](#)** · **[Try the web viewer](https://praful-joshi.github.io/Renderit/)** · **[Quickstart](#quickstart)**
 
-<img src="docs/images/web-viewer-screenshot.png" alt="Renderit's viewer, shown here on the web — same rendering core the VS Code extension embeds" width="800">
-
-<sub>Shown here on the web viewer (same rendering core the extension embeds) — a real screen recording of the extension itself is still needed; see <a href="#development">Development</a> to run it locally in the meantime.</sub>
+<img src="docs/images/zip_support.gif" alt="Renderit's viewer, shown here on the web — same rendering core the VS Code extension embeds" width="800">
 
 </div>
 

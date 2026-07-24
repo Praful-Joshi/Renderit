@@ -3,7 +3,7 @@
   "displayName": "Renderit 3D Viewer",
   "description": "View 3D models (glTF/GLB, OBJ, FBX, STL, Collada) directly in VS Code.",
   "version": "0.1.0",
-  "publisher": "REPLACE_WITH_YOUR_MARKETPLACE_PUBLISHER_ID",
+  "publisher": "PrafulJoshi",
   "icon": "icon.png",
   "license": "MIT",
   "repository": {
